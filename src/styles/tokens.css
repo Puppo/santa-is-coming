@@ -1,0 +1,142 @@
+:root {
+  /* Storybook Arctic Diorama palette */
+  --bg-arctic-deep: #091326;
+  --surface-glass: rgba(12, 24, 46, 0.72);
+  --surface-glass-strong: rgba(10, 20, 39, 0.88);
+  --surface-pill: rgba(255, 255, 255, 0.08);
+  --surface-pill-hover: rgba(255, 255, 255, 0.16);
+  --border-frost: rgba(214, 232, 255, 0.22);
+  --border-gold: rgba(255, 209, 102, 0.65);
+
+  --text-primary: #f7f9fc;
+  --text-secondary: #c7d6ec;
+  --text-muted: #93accb;
+
+  --accent-gold: #ffd166;
+  --accent-amber: #ff9f43;
+  --accent-berry: #d93848;
+  --accent-pine: #2f855a;
+  --accent-grump: #6ad464;
+  --accent-focus: #ffd166;
+
+  /* Spacing & radii scale (0.25rem increments) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.875rem;
+  --radius-pill: 9999px;
+
+  /* Accessible target sizing (WCAG 2.5.8 / 2.5.5) */
+  --target-size: 24px;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans:
+    "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --target-size: 44px;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-arctic-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  text-wrap: balance;
+  margin: 0;
+}
+
+p,
+li {
+  text-wrap: pretty;
+}
+
+img,
+video {
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+:where(a, code) {
+  overflow-wrap: anywhere;
+}
+
+:where(
+  button,
+  select,
+  textarea,
+  input:not([type="checkbox"], [type="radio"]),
+  [role="button"],
+  nav a
+) {
+  min-block-size: var(--target-size);
+  min-inline-size: var(--target-size);
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+}
+
+:where(a:any-link, button, select, input):focus-visible {
+  outline: 3px solid var(--accent-focus);
+  outline-offset: 3px;
+}
+
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+.skip-link:focus-visible {
+  position: fixed;
+  top: max(0.75rem, env(safe-area-inset-top, 0px));
+  left: max(0.75rem, env(safe-area-inset-left, 0px));
+  z-index: 90;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-glass-strong);
+  color: var(--accent-gold);
+  text-decoration: none;
+  font-weight: 700;
+}
