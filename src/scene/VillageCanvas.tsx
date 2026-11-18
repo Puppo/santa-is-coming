@@ -1,7 +1,8 @@
-import { PerformanceMonitor, useGLTF } from '@react-three/drei';
+import { PerformanceMonitor } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { Component, type ReactNode, Suspense, useMemo, useState } from 'react';
+import { Component, type ReactNode, useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
+import { preloadGltf } from '../assets/asyncAssets';
 import { MODEL_PATHS } from '../assets/modelRegistry';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
 import { Atmosphere } from './Atmosphere';
@@ -13,19 +14,12 @@ import { isMobileGpuDevice } from './deviceProfile';
 import { FairyGarlands } from './FairyGarlands';
 import { PostEffects } from './PostEffects';
 import { Snowfall } from './Snowfall';
-import { ProceduralTerrainFallback, TerrainDiorama } from './TerrainDiorama';
+import { TerrainDiorama } from './TerrainDiorama';
 import { ElfWorkshop } from './zones/ElfWorkshop';
 import { GreatTreePlaza } from './zones/GreatTreePlaza';
 import { PineWoods } from './zones/PineWoods';
 import { SantaCabin } from './zones/SantaCabin';
 import { SleighPaddock } from './zones/SleighPaddock';
-
-// Preload core models so loading progress advances smoothly
-useGLTF.preload(MODEL_PATHS.stagRigged);
-useGLTF.preload(MODEL_PATHS.trainLocomotive);
-useGLTF.preload(POLYHAVEN_PATHS.streetLamp);
-useGLTF.preload(POLYHAVEN_PATHS.woodenBench);
-useGLTF.preload(POLYHAVEN_PATHS.woodenLantern);
 
 interface BoundaryState {
   hasError: boolean;
@@ -63,6 +57,14 @@ export function VillageCanvas() {
   const [dpr, setDpr] = useState<[number, number]>(initialMobile ? [1, 1.5] : [1, 2]);
   const [enablePostFx, setEnablePostFx] = useState(!initialMobile);
 
+  useEffect(() => {
+    void preloadGltf(MODEL_PATHS.stagRigged);
+    void preloadGltf(MODEL_PATHS.trainLocomotive);
+    void preloadGltf(POLYHAVEN_PATHS.streetLamp);
+    void preloadGltf(POLYHAVEN_PATHS.woodenBench);
+    void preloadGltf(POLYHAVEN_PATHS.woodenLantern);
+  }, []);
+
   return (
     <SceneErrorBoundary>
       <div className="canvas-layer">
@@ -91,38 +93,23 @@ export function VillageCanvas() {
           <Atmosphere />
           <CameraRig />
 
-          {/* Immediate zero-network village motion, snow, garlands & characters */}
+          <TerrainDiorama mobileGpu={initialMobile} />
           <FairyGarlands />
           <Snowfall count={initialMobile ? 480 : enablePostFx ? 1100 : 550} />
+
+          {/* Village Zones */}
+          <GreatTreePlaza />
+          <ElfWorkshop />
+          <SantaCabin />
+          <SleighPaddock />
+          <PineWoods />
+
+          {/* Animated Characters */}
           <ElfSquad />
           <RiggedSanta />
           <HolidayGrump />
 
-          {/* Terrain streams PBR maps progressively over an instant procedural island */}
-          <Suspense fallback={<ProceduralTerrainFallback />}>
-            <TerrainDiorama mobileGpu={initialMobile} />
-          </Suspense>
-
-          {/* Zones stream in independently so no single asset blocks the whole diorama */}
-          <Suspense fallback={null}>
-            <GreatTreePlaza />
-          </Suspense>
-          <Suspense fallback={null}>
-            <ElfWorkshop />
-          </Suspense>
-          <Suspense fallback={null}>
-            <SantaCabin />
-          </Suspense>
-          <Suspense fallback={null}>
-            <SleighPaddock />
-          </Suspense>
-          <Suspense fallback={null}>
-            <PineWoods />
-          </Suspense>
-
-          <Suspense fallback={null}>
-            <PostEffects enabled={enablePostFx} />
-          </Suspense>
+          <PostEffects enabled={enablePostFx} />
         </Canvas>
       </div>
     </SceneErrorBoundary>

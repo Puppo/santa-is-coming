@@ -80,9 +80,11 @@
   font-size: clamp(0.875rem, 2.2vw, 1.15rem);
   line-height: 1.15;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.hud-header-compact .brand-title {
+  font-size: clamp(0.74rem, 3.2vw, 0.875rem);
+  line-height: 1.12;
 }
 
 .brand-sub {
@@ -478,6 +480,11 @@
     inline-size: 100%;
     padding: 0.25rem;
     gap: var(--space-1);
+  }
+
+  .zone-nav {
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
   }
 
   .zone-pill {

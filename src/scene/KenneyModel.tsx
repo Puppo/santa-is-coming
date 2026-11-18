@@ -1,6 +1,6 @@
-import { useGLTF } from '@react-three/drei';
 import type { ThreeElements } from '@react-three/fiber';
-import { Suspense, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useAsyncGltf } from '../assets/asyncAssets';
 import { type EnhanceOptions, enhanceHolidayGltf } from '../assets/enhanceMaterials';
 import { MODEL_PATHS, type ModelKey } from '../assets/modelRegistry';
 
@@ -11,27 +11,21 @@ interface KenneyModelProps extends GroupProps {
   enhance?: EnhanceOptions;
 }
 
-function KenneyModelInner({ model, enhance, ...groupProps }: KenneyModelProps) {
-  const path = MODEL_PATHS[model];
-  const gltf = useGLTF(path);
+export function KenneyModel({ model, enhance, ...groupProps }: KenneyModelProps) {
+  const gltf = useAsyncGltf(MODEL_PATHS[model]);
 
   const cloned = useMemo(() => {
+    if (!gltf) return null;
     const copy = gltf.scene.clone(true);
     enhanceHolidayGltf(copy, enhance);
     return copy;
-  }, [gltf.scene, enhance]);
+  }, [gltf, enhance]);
+
+  if (!cloned) return null;
 
   return (
     <group {...groupProps}>
       <primitive object={cloned} />
     </group>
-  );
-}
-
-export function KenneyModel(props: KenneyModelProps) {
-  return (
-    <Suspense fallback={null}>
-      <KenneyModelInner {...props} />
-    </Suspense>
   );
 }

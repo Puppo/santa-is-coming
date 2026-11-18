@@ -1,7 +1,7 @@
-import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { Suspense, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { useAsyncGltf } from '../../assets/asyncAssets';
 import { enhanceHolidayGltf, smoothMeshNormalsInPlace } from '../../assets/enhanceMaterials';
 import { MODEL_PATHS, type ModelKey } from '../../assets/modelRegistry';
 import { useSnowPbr, useStonePbr } from '../../assets/pbrMaterials';
@@ -18,13 +18,16 @@ const TRACK_RADIUS = 3.45;
 const SLEEPER_COUNT = 34;
 
 function SmoothedTrainCar({ model }: { model: ModelKey }) {
-  const gltf = useGLTF(MODEL_PATHS[model]);
+  const gltf = useAsyncGltf(MODEL_PATHS[model]);
   const cloned = useMemo(() => {
+    if (!gltf) return null;
     const copy = gltf.scene.clone(true);
     smoothMeshNormalsInPlace(copy, 55);
     enhanceHolidayGltf(copy, { roughness: 0.34, metalness: 0.25, envMapIntensity: 1.35 });
     return copy;
-  }, [gltf.scene]);
+  }, [gltf]);
+
+  if (!cloned) return null;
 
   return <primitive object={cloned} scale={1.45} rotation={[0, -Math.PI / 2, 0]} />;
 }
@@ -319,9 +322,7 @@ export function GreatTreePlaza() {
           }}
         >
           <group ref={locoRef}>
-            <Suspense fallback={null}>
-              <SmoothedTrainCar model="trainLocomotive" />
-            </Suspense>
+            <SmoothedTrainCar model="trainLocomotive" />
             <ChimneySmoke
               position={[0, 0.65, 0.18]}
               count={8}
@@ -331,19 +332,13 @@ export function GreatTreePlaza() {
             />
           </group>
           <group ref={tenderRef}>
-            <Suspense fallback={null}>
-              <SmoothedTrainCar model="trainTender" />
-            </Suspense>
+            <SmoothedTrainCar model="trainTender" />
           </group>
           <group ref={wagon1Ref}>
-            <Suspense fallback={null}>
-              <SmoothedTrainCar model="trainWagon" />
-            </Suspense>
+            <SmoothedTrainCar model="trainWagon" />
           </group>
           <group ref={wagon2Ref}>
-            <Suspense fallback={null}>
-              <SmoothedTrainCar model="trainWagonLogs" />
-            </Suspense>
+            <SmoothedTrainCar model="trainWagonLogs" />
           </group>
         </group>
       </group>

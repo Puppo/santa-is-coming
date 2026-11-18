@@ -2,7 +2,6 @@ import { MeshReflectorMaterial } from '@react-three/drei';
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useCobblePbr, useSnowPbr, useWoodPbr } from '../assets/pbrMaterials';
-import { getIceTextures, getSnowTextures, getTimberTextures } from '../assets/proceduralTextures';
 import { getGroundHeight, ISLAND_RADIUS } from './terrainMath';
 
 const PATH_CURVES = [
@@ -62,48 +61,6 @@ function buildSnowIslandGeometry(): THREE.BufferGeometry {
   disc.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   disc.computeVertexNormals();
   return disc;
-}
-
-/** Zero-network fallback island so Frame 1 shows snow and timber even before PBR downloads. */
-export function ProceduralTerrainFallback() {
-  const snow = useMemo(() => getSnowTextures(), []);
-  const wood = useMemo(() => getTimberTextures(), []);
-  const ice = useMemo(() => getIceTextures(), []);
-  const snowGeometry = useMemo(() => buildSnowIslandGeometry(), []);
-
-  return (
-    <group name="terrain-diorama-fallback">
-      <mesh geometry={snowGeometry} receiveShadow>
-        <meshStandardMaterial
-          map={snow.map}
-          bumpMap={snow.bumpMap}
-          bumpScale={0.04}
-          roughnessMap={snow.roughnessMap}
-          roughness={0.86}
-          vertexColors
-        />
-      </mesh>
-      <mesh position={[0, -1.72, 0]} receiveShadow>
-        <cylinderGeometry args={[ISLAND_RADIUS + 0.15, ISLAND_RADIUS + 0.55, 2.2, 64]} />
-        <meshStandardMaterial map={wood.map} color="#633f28" roughness={0.68} metalness={0.05} />
-      </mesh>
-      <mesh position={[0, -0.66, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[ISLAND_RADIUS + 0.16, 0.11, 10, 72]} />
-        <meshStandardMaterial color="#b48a46" roughness={0.28} metalness={0.85} />
-      </mesh>
-      <mesh position={[5.6, -0.14, 5.4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[3.35, 48]} />
-        <meshStandardMaterial
-          color="#82b4cf"
-          bumpMap={ice.bumpMap}
-          bumpScale={0.02}
-          roughnessMap={ice.roughnessMap}
-          roughness={0.18}
-          metalness={0.22}
-        />
-      </mesh>
-    </group>
-  );
 }
 
 export function TerrainDiorama({ mobileGpu = false }: { mobileGpu?: boolean }) {

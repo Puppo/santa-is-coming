@@ -11,6 +11,11 @@ let timberCache: PbrTextureSet | null = null;
 let stoneCache: PbrTextureSet | null = null;
 let iceCache: { bumpMap: THREE.CanvasTexture; roughnessMap: THREE.CanvasTexture } | null = null;
 let fabricNormalCache: THREE.CanvasTexture | null = null;
+let firFoliageCache: {
+  twigMap: THREE.CanvasTexture;
+  twigAlphaMap: THREE.CanvasTexture;
+  twigNormalMap: THREE.CanvasTexture;
+} | null = null;
 
 function createCanvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement('canvas');
@@ -277,4 +282,90 @@ export function getFabricNormalMap(): THREE.CanvasTexture {
   ctx.putImageData(img, 0, 0);
   fabricNormalCache = finalizeTexture(canvas, 6, false);
   return fabricNormalCache;
+}
+
+/** Immediate pine-needle frond albedo + cutout alpha fallback so spruces render at 0ms. */
+export function getFirFoliageFallback(): {
+  twigMap: THREE.CanvasTexture;
+  twigAlphaMap: THREE.CanvasTexture;
+  twigNormalMap: THREE.CanvasTexture;
+} {
+  if (firFoliageCache) return firFoliageCache;
+
+  const size = 256;
+  const [cCanvas, cCtx] = createCanvas(size);
+  const [aCanvas, aCtx] = createCanvas(size);
+
+  cCtx.fillStyle = '#24472c';
+  cCtx.fillRect(0, 0, size, size);
+  aCtx.fillStyle = '#000000';
+  aCtx.fillRect(0, 0, size, size);
+
+  const regions: Array<[number, number, number, number]> = [
+    [0.29, 0.64, 0.21, 0.61],
+    [0.63, 0.97, 0.16, 0.55],
+    [0.64, 0.96, 0.62, 0.96],
+  ];
+
+  for (const [uMin, uMax, vMin, vMax] of regions) {
+    const cx = (uMin + uMax) * 0.5 * size;
+    const baseY = (1 - vMin) * size;
+    const topY = (1 - vMax) * size;
+    const spanW = (uMax - uMin) * size;
+    const spanH = Math.abs(baseY - topY);
+
+    cCtx.strokeStyle = '#4f3a25';
+    cCtx.lineWidth = 3;
+    cCtx.beginPath();
+    cCtx.moveTo(cx, baseY);
+    cCtx.lineTo(cx, topY + spanH * 0.1);
+    cCtx.stroke();
+
+    aCtx.strokeStyle = '#ffffff';
+    aCtx.lineWidth = 4;
+    aCtx.beginPath();
+    aCtx.moveTo(cx, baseY);
+    aCtx.lineTo(cx, topY + spanH * 0.08);
+    aCtx.stroke();
+
+    const rows = 14;
+    for (let r = 0; r < rows; r++) {
+      const frac = r / (rows - 1);
+      const y = baseY - frac * spanH * 0.88;
+      const needleLen = spanW * (0.48 - frac * 0.26);
+      for (const side of [-1, 1]) {
+        const endX = cx + side * needleLen;
+        const endY = y - spanH * 0.11;
+
+        cCtx.strokeStyle = r % 2 === 0 ? '#2f5e39' : '#3a6e44';
+        cCtx.lineWidth = 3.2;
+        cCtx.beginPath();
+        cCtx.moveTo(cx, y);
+        cCtx.lineTo(endX, endY);
+        cCtx.stroke();
+
+        aCtx.strokeStyle = '#ffffff';
+        aCtx.lineWidth = 4.2;
+        aCtx.beginPath();
+        aCtx.moveTo(cx, y);
+        aCtx.lineTo(endX, endY);
+        aCtx.stroke();
+      }
+    }
+  }
+
+  const twigMap = new THREE.CanvasTexture(cCanvas);
+  twigMap.colorSpace = THREE.SRGBColorSpace;
+  twigMap.needsUpdate = true;
+
+  const twigAlphaMap = new THREE.CanvasTexture(aCanvas);
+  twigAlphaMap.colorSpace = THREE.NoColorSpace;
+  twigAlphaMap.needsUpdate = true;
+
+  firFoliageCache = {
+    twigMap,
+    twigAlphaMap,
+    twigNormalMap: getFabricNormalMap(),
+  };
+  return firFoliageCache;
 }

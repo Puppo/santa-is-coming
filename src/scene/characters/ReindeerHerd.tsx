@@ -1,8 +1,10 @@
-import { useAnimations, useGLTF } from '@react-three/drei';
+import { useAnimations } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { useAsyncGltf } from '../../assets/asyncAssets';
 import { enhanceHolidayGltf, smoothMeshNormalsInPlace } from '../../assets/enhanceMaterials';
 import { MODEL_PATHS } from '../../assets/modelRegistry';
 import { getFabricNormalMap } from '../../assets/proceduralTextures';
@@ -10,6 +12,7 @@ import { playSleighBells } from '../../audio/soundEffects';
 import { useVillage } from '../../state/villageStore';
 
 interface ReindeerUnitProps {
+  gltf: GLTF;
   position: [number, number, number];
   isRudolph?: boolean;
   isFlying: boolean;
@@ -20,6 +23,7 @@ interface ReindeerUnitProps {
 }
 
 function ReindeerUnit({
+  gltf,
   position,
   isRudolph = false,
   isFlying,
@@ -28,7 +32,6 @@ function ReindeerUnit({
   delayPhase,
   onPrance,
 }: ReindeerUnitProps) {
-  const gltf = useGLTF(MODEL_PATHS.stagRigged);
   const animRootRef = useRef<THREE.Group>(null);
   const hopRef = useRef(0);
   const [prancing, setPrancing] = useState(false);
@@ -173,7 +176,8 @@ const TEAM_OFFSETS: Array<{ pos: [number, number, number]; isRudolph?: boolean }
   { pos: [0.62, 0, 5.25], isRudolph: true },
 ];
 
-function ReindeerHerdInner({ isFlying }: { isFlying: boolean }) {
+export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
+  const gltf = useAsyncGltf(MODEL_PATHS.stagRigged);
   const { motionPaused, partyMode, announceKey } = useVillage();
 
   const handlePrance = () => {
@@ -182,25 +186,6 @@ function ReindeerHerdInner({ isFlying }: { isFlying: boolean }) {
   };
 
   return (
-    <group name="reindeer-herd-models">
-      {TEAM_OFFSETS.map((unit, idx) => (
-        <ReindeerUnit
-          key={`reindeer-${unit.pos[0]}-${unit.pos[2]}`}
-          position={unit.pos}
-          isRudolph={unit.isRudolph}
-          isFlying={isFlying}
-          motionPaused={motionPaused}
-          partyMode={partyMode}
-          delayPhase={idx * 0.7}
-          onPrance={handlePrance}
-        />
-      ))}
-    </group>
-  );
-}
-
-export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
-  return (
     <group name="reindeer-herd">
       {[-0.45, 0.45].map((x) => (
         <mesh key={`trace-${x}`} position={[x, 0.56, 3.1]} rotation={[Math.PI / 2, 0, 0]}>
@@ -208,9 +193,23 @@ export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
           <meshStandardMaterial color="#583018" roughness={0.72} />
         </mesh>
       ))}
-      <Suspense fallback={null}>
-        <ReindeerHerdInner isFlying={isFlying} />
-      </Suspense>
+      {gltf && (
+        <group name="reindeer-herd-models">
+          {TEAM_OFFSETS.map((unit, idx) => (
+            <ReindeerUnit
+              key={`reindeer-${unit.pos[0]}-${unit.pos[2]}`}
+              gltf={gltf}
+              position={unit.pos}
+              isRudolph={unit.isRudolph}
+              isFlying={isFlying}
+              motionPaused={motionPaused}
+              partyMode={partyMode}
+              delayPhase={idx * 0.7}
+              onPrance={handlePrance}
+            />
+          ))}
+        </group>
+      )}
     </group>
   );
 }

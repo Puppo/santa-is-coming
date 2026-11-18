@@ -1,8 +1,16 @@
-import { useTexture } from '@react-three/drei';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { isMobileGpuDevice } from '../scene/deviceProfile';
+import { getResolvedTexture, loadCachedTexture } from './asyncAssets';
 import { withBase } from './baseUrl';
+import {
+  getFabricNormalMap,
+  getFirFoliageFallback,
+  getSnowTextures,
+  getStoneCobbleTextures,
+  getTimberTextures,
+  type PbrTextureSet,
+} from './proceduralTextures';
 
 export const POLYHAVEN_PATHS = {
   hdriNight: withBase('/polyhaven/hdri/rogland_moonlit_night_1k.hdr'),
@@ -76,90 +84,180 @@ function configureSingleMap(source: THREE.Texture, isColor: boolean): THREE.Text
   return tex;
 }
 
-function useScannedTriplet(
+function readCachedTriplet(
   diffUrl: string,
   norUrl: string,
   armUrl: string,
+): [THREE.Texture, THREE.Texture, THREE.Texture] | null {
+  const d = getResolvedTexture(diffUrl);
+  const n = getResolvedTexture(norUrl);
+  const a = getResolvedTexture(armUrl);
+  return d && n && a ? [d, n, a] : null;
+}
+
+function useProgressiveTriplet(
+  diffUrl: string,
+  norUrl: string,
+  armUrl: string,
+  getFallback: () => PbrTextureSet,
   repeatX: number,
   repeatY = repeatX,
 ): ScannedPbrMaps {
-  const [diff, nor, arm] = useTexture([diffUrl, norUrl, armUrl]);
+  const [loaded, setLoaded] = useState<[THREE.Texture, THREE.Texture, THREE.Texture] | null>(() =>
+    readCachedTriplet(diffUrl, norUrl, armUrl),
+  );
+
+  useEffect(() => {
+    const cached = readCachedTriplet(diffUrl, norUrl, armUrl);
+    if (cached) {
+      setLoaded(cached);
+      return undefined;
+    }
+
+    let cancelled = false;
+    void Promise.all([
+      loadCachedTexture(diffUrl),
+      loadCachedTexture(norUrl),
+      loadCachedTexture(armUrl),
+    ]).then(([d, n, a]) => {
+      if (!cancelled && d && n && a) {
+        setLoaded([d, n, a]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [diffUrl, norUrl, armUrl]);
 
   return useMemo(() => {
-    const map = configureMap(diff, repeatX, repeatY, true);
-    const normalMap = configureMap(nor, repeatX, repeatY, false);
-    const armMap = configureMap(arm, repeatX, repeatY, false);
+    if (loaded) {
+      const [diff, nor, arm] = loaded;
+      const map = configureMap(diff, repeatX, repeatY, true);
+      const normalMap = configureMap(nor, repeatX, repeatY, false);
+      const armMap = configureMap(arm, repeatX, repeatY, false);
+      return {
+        map,
+        normalMap,
+        roughnessMap: armMap,
+        aoMap: armMap,
+      };
+    }
+
+    const fb = getFallback();
+    const normalFallback = getFabricNormalMap();
     return {
-      map,
-      normalMap,
-      roughnessMap: armMap,
-      aoMap: armMap,
+      map: configureMap(fb.map, repeatX, repeatY, true),
+      normalMap: configureMap(normalFallback, repeatX, repeatY, false),
+      roughnessMap: configureMap(fb.roughnessMap, repeatX, repeatY, false),
+      aoMap: configureMap(fb.roughnessMap, repeatX, repeatY, false),
     };
-  }, [diff, nor, arm, repeatX, repeatY]);
+  }, [loaded, getFallback, repeatX, repeatY]);
 }
 
 export function useSnowPbr(repeatX = 12, repeatY = repeatX): ScannedPbrMaps {
-  return useScannedTriplet(
+  return useProgressiveTriplet(
     POLYHAVEN_PATHS.snowDiff,
     POLYHAVEN_PATHS.snowNor,
     POLYHAVEN_PATHS.snowArm,
+    getSnowTextures,
     repeatX,
     repeatY,
   );
 }
 
 export function useWoodPbr(repeatX = 2, repeatY = repeatX): ScannedPbrMaps {
-  return useScannedTriplet(
+  return useProgressiveTriplet(
     POLYHAVEN_PATHS.woodDiff,
     POLYHAVEN_PATHS.woodNor,
     POLYHAVEN_PATHS.woodArm,
+    getTimberTextures,
     repeatX,
     repeatY,
   );
 }
 
 export function useStonePbr(repeatX = 2, repeatY = repeatX): ScannedPbrMaps {
-  return useScannedTriplet(
+  return useProgressiveTriplet(
     POLYHAVEN_PATHS.stoneDiff,
     POLYHAVEN_PATHS.stoneNor,
     POLYHAVEN_PATHS.stoneArm,
+    getStoneCobbleTextures,
     repeatX,
     repeatY,
   );
 }
 
 export function useCobblePbr(repeatX = 4, repeatY = repeatX): ScannedPbrMaps {
-  return useScannedTriplet(
+  return useProgressiveTriplet(
     POLYHAVEN_PATHS.cobbleDiff,
     POLYHAVEN_PATHS.cobbleNor,
     POLYHAVEN_PATHS.cobbleArm,
+    getStoneCobbleTextures,
     repeatX,
     repeatY,
   );
 }
 
+type FirMaps = [THREE.Texture, THREE.Texture, THREE.Texture, THREE.Texture, THREE.Texture];
+
+function readCachedFir(): FirMaps | null {
+  const td = getResolvedTexture(POLYHAVEN_PATHS.firTwigDiff);
+  const ta = getResolvedTexture(POLYHAVEN_PATHS.firTwigAlpha);
+  const tn = getResolvedTexture(POLYHAVEN_PATHS.firTwigNor);
+  const bd = getResolvedTexture(POLYHAVEN_PATHS.firBarkDiff);
+  const bn = getResolvedTexture(POLYHAVEN_PATHS.firBarkNor);
+  return td && ta && tn && bd && bn ? [td, ta, tn, bd, bn] : null;
+}
+
 export function useFirFoliagePbr() {
-  const [twigDiff, twigAlpha, twigNor, barkDiff, barkNor] = useTexture([
-    POLYHAVEN_PATHS.firTwigDiff,
-    POLYHAVEN_PATHS.firTwigAlpha,
-    POLYHAVEN_PATHS.firTwigNor,
-    POLYHAVEN_PATHS.firBarkDiff,
-    POLYHAVEN_PATHS.firBarkNor,
-  ]);
+  const [loaded, setLoaded] = useState<FirMaps | null>(readCachedFir);
+
+  useEffect(() => {
+    const cached = readCachedFir();
+    if (cached) {
+      setLoaded(cached);
+      return undefined;
+    }
+
+    let cancelled = false;
+    void Promise.all([
+      loadCachedTexture(POLYHAVEN_PATHS.firTwigDiff),
+      loadCachedTexture(POLYHAVEN_PATHS.firTwigAlpha),
+      loadCachedTexture(POLYHAVEN_PATHS.firTwigNor),
+      loadCachedTexture(POLYHAVEN_PATHS.firBarkDiff),
+      loadCachedTexture(POLYHAVEN_PATHS.firBarkNor),
+    ]).then(([td, ta, tn, bd, bn]) => {
+      if (!cancelled && td && ta && tn && bd && bn) {
+        setLoaded([td, ta, tn, bd, bn]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return useMemo(() => {
-    const td = configureSingleMap(twigDiff, true);
-    const ta = configureSingleMap(twigAlpha, false);
-    const tn = configureSingleMap(twigNor, false);
-    const bd = configureMap(barkDiff, 2, 4, true);
-    const bn = configureMap(barkNor, 2, 4, false);
+    if (loaded) {
+      const [twigDiff, twigAlpha, twigNor, barkDiff, barkNor] = loaded;
+      return {
+        twigMap: configureSingleMap(twigDiff, true),
+        twigAlphaMap: configureSingleMap(twigAlpha, false),
+        twigNormalMap: configureSingleMap(twigNor, false),
+        barkMap: configureMap(barkDiff, 2, 4, true),
+        barkNormalMap: configureMap(barkNor, 2, 4, false),
+      };
+    }
 
+    const fbTwig = getFirFoliageFallback();
+    const fbBark = getTimberTextures();
     return {
-      twigMap: td,
-      twigAlphaMap: ta,
-      twigNormalMap: tn,
-      barkMap: bd,
-      barkNormalMap: bn,
+      twigMap: fbTwig.twigMap,
+      twigAlphaMap: fbTwig.twigAlphaMap,
+      twigNormalMap: fbTwig.twigNormalMap,
+      barkMap: configureMap(fbBark.map, 2, 4, true),
+      barkNormalMap: configureMap(getFabricNormalMap(), 2, 4, false),
     };
-  }, [twigDiff, twigAlpha, twigNor, barkDiff, barkNor]);
+  }, [loaded]);
 }

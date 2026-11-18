@@ -1,7 +1,8 @@
-import { ContactShadows, Environment } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
-import { Suspense, useMemo, useRef } from 'react';
+import { ContactShadows } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { loadCachedHdri } from '../assets/asyncAssets';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
 import { christmasAudioEngine } from '../audio/audioEngine';
 import type { AtmosphereMode } from '../i18n/translations';
@@ -113,8 +114,26 @@ export function Atmosphere() {
   const { atmosphere, motionPaused, partyMode, isMusicPlaying } = useVillage();
   const cfg = ATMOSPHERE_CONFIG[atmosphere];
   const mobileGpu = useMemo(() => isMobileGpuDevice(), []);
+  const scene = useThree((s) => s.scene);
 
   const auroraMatRef = useRef<THREE.ShaderMaterial>(null);
+
+  const activeHdri = atmosphere === 'day' ? POLYHAVEN_PATHS.hdriDay : POLYHAVEN_PATHS.hdriNight;
+
+  useEffect(() => {
+    scene.environmentIntensity = cfg.envIntensity;
+    let cancelled = false;
+
+    void loadCachedHdri(activeHdri).then((envTex) => {
+      if (!cancelled && envTex) {
+        scene.environment = envTex;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scene, activeHdri, cfg.envIntensity]);
 
   const starsGeo = useMemo(() => {
     const count = 420;
@@ -160,16 +179,10 @@ export function Atmosphere() {
     }
   });
 
-  const activeHdri = atmosphere === 'day' ? POLYHAVEN_PATHS.hdriDay : POLYHAVEN_PATHS.hdriNight;
-
   return (
     <>
       <color attach="background" args={[cfg.bg]} />
       <fogExp2 attach="fog" args={[cfg.fog, cfg.fogDensity]} />
-
-      <Suspense fallback={null}>
-        <Environment files={activeHdri} environmentIntensity={cfg.envIntensity} />
-      </Suspense>
 
       <hemisphereLight args={[cfg.hemiSky, cfg.hemiGround, cfg.hemiIntensity]} />
 

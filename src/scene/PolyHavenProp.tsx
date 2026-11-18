@@ -1,16 +1,22 @@
-import { useGLTF } from '@react-three/drei';
 import type { ThreeElements } from '@react-three/fiber';
-import { Suspense, useMemo } from 'react';
+import { useMemo } from 'react';
 import * as THREE from 'three';
+import { useAsyncGltf } from '../assets/asyncAssets';
 import { enhanceHolidayGltf } from '../assets/enhanceMaterials';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
 
 type GroupProps = ThreeElements['group'];
 
-function StreetLampMesh() {
-  const gltf = useGLTF(POLYHAVEN_PATHS.streetLamp);
+export function VictorianStreetLamp({
+  lightIntensity = 0,
+  lightColor = '#ffaf54',
+  enablePointLight = false,
+  ...props
+}: GroupProps & { lightIntensity?: number; lightColor?: string; enablePointLight?: boolean }) {
+  const gltf = useAsyncGltf(POLYHAVEN_PATHS.streetLamp);
 
   const cloned = useMemo(() => {
+    if (!gltf) return null;
     const copy = gltf.scene.clone(true);
     enhanceHolidayGltf(copy, { envMapIntensity: 1.3 });
     copy.traverse((obj) => {
@@ -24,22 +30,18 @@ function StreetLampMesh() {
       }
     });
     return copy;
-  }, [gltf.scene]);
+  }, [gltf]);
 
-  return <primitive object={cloned} scale={0.78} />;
-}
-
-export function VictorianStreetLamp({
-  lightIntensity = 0,
-  lightColor = '#ffaf54',
-  enablePointLight = false,
-  ...props
-}: GroupProps & { lightIntensity?: number; lightColor?: string; enablePointLight?: boolean }) {
   return (
     <group {...props}>
-      <Suspense fallback={null}>
-        <StreetLampMesh />
-      </Suspense>
+      {cloned ? (
+        <primitive object={cloned} scale={0.78} />
+      ) : (
+        <mesh position={[0, 1.34, 0]} castShadow>
+          <cylinderGeometry args={[0.045, 0.075, 2.68, 10]} />
+          <meshStandardMaterial color="#1d2228" roughness={0.6} metalness={0.65} />
+        </mesh>
+      )}
       {/* Warm HDR tungsten bulb core & translucent warm halo (avoids per-pixel pointLight overhead) */}
       <mesh position={[0, 2.74, 0]}>
         <sphereGeometry args={[0.075, 10, 10]} />
@@ -62,38 +64,23 @@ export function VictorianStreetLamp({
   );
 }
 
-function BenchMesh() {
-  const gltf = useGLTF(POLYHAVEN_PATHS.woodenBench);
+export function PhotogrammetryBench(props: GroupProps) {
+  const gltf = useAsyncGltf(POLYHAVEN_PATHS.woodenBench);
 
   const cloned = useMemo(() => {
+    if (!gltf) return null;
     const copy = gltf.scene.clone(true);
     enhanceHolidayGltf(copy, { envMapIntensity: 1.15 });
     return copy;
-  }, [gltf.scene]);
+  }, [gltf]);
 
-  return <primitive object={cloned} scale={1.35} />;
-}
+  if (!cloned) return null;
 
-export function PhotogrammetryBench(props: GroupProps) {
   return (
     <group {...props}>
-      <Suspense fallback={null}>
-        <BenchMesh />
-      </Suspense>
+      <primitive object={cloned} scale={1.35} />
     </group>
   );
-}
-
-function WoodenLanternMesh() {
-  const gltf = useGLTF(POLYHAVEN_PATHS.woodenLantern);
-
-  const cloned = useMemo(() => {
-    const copy = gltf.scene.clone(true);
-    enhanceHolidayGltf(copy, { envMapIntensity: 1.2 });
-    return copy;
-  }, [gltf.scene]);
-
-  return <primitive object={cloned} scale={0.85} position={[0, 0.132, 0]} />;
 }
 
 export function WarmWoodenLantern({
@@ -101,12 +88,19 @@ export function WarmWoodenLantern({
   enablePointLight = false,
   ...props
 }: GroupProps & { lightIntensity?: number; enablePointLight?: boolean }) {
+  const gltf = useAsyncGltf(POLYHAVEN_PATHS.woodenLantern);
+
+  const cloned = useMemo(() => {
+    if (!gltf) return null;
+    const copy = gltf.scene.clone(true);
+    enhanceHolidayGltf(copy, { envMapIntensity: 1.2 });
+    return copy;
+  }, [gltf]);
+
   // wooden_lantern_01 bottom is at -0.155 in model space
   return (
     <group {...props}>
-      <Suspense fallback={null}>
-        <WoodenLanternMesh />
-      </Suspense>
+      {cloned && <primitive object={cloned} scale={0.85} position={[0, 0.132, 0]} />}
       <mesh position={[0, 0.21, 0]}>
         <sphereGeometry args={[0.04, 8, 8]} />
         <meshBasicMaterial color={[3.1, 2.0, 0.78]} toneMapped={false} />
