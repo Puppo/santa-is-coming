@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#142b52" />
+      <stop offset="100%" stop-color="#081326" />
+    </linearGradient>
+    <linearGradient id="tree" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38a169" />
+      <stop offset="100%" stop-color="#1b5e3c" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)" />
+  <rect x="28" y="47" width="8" height="8" rx="1.5" fill="#6d4329" />
+  <polygon points="32,14 48,32 39,32 51,48 13,48 25,32 16,32" fill="url(#tree)" />
+  <polygon points="32,14 38,21 26,21" fill="#eef6ff" opacity="0.88" />
+  <circle cx="27" cy="30" r="2.2" fill="#e53e3e" />
+  <circle cx="37" cy="36" r="2.2" fill="#ffd166" />
+  <circle cx="24" cy="42" r="2.2" fill="#63b3ed" />
+  <circle cx="39" cy="43" r="2.2" fill="#e53e3e" />
+  <polygon points="32,5 34.4,10.2 40,10.8 35.8,14.6 37,20 32,17.1 27,20 28.2,14.6 24,10.8 29.6,10.2" fill="#ffd166" />
+</svg>
