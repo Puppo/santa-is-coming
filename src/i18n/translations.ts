@@ -9,6 +9,7 @@ export interface ZoneCopy {
   title: string;
   description: string;
   actionLabel: string;
+  shortActionLabel: string;
 }
 
 export interface TranslationDict {
@@ -26,6 +27,7 @@ export interface TranslationDict {
   motionPause: string;
   motionResume: string;
   languageSwitchLabel: string;
+  controlsMenuOpen: string;
   creditsOpen: string;
   creditsTitle: string;
   creditsClose: string;
@@ -93,6 +95,7 @@ export const TRANSLATIONS: Record<Locale, TranslationDict> = {
     motionPause: 'Metti in pausa le animazioni',
     motionResume: 'Riprendi le animazioni',
     languageSwitchLabel: 'Passa a English',
+    controlsMenuOpen: 'Controlli e musica',
     creditsOpen: 'Info & Crediti',
     creditsTitle: 'Guida al Villaggio & Crediti Open Source',
     creditsClose: 'Chiudi',
@@ -114,30 +117,35 @@ export const TRANSLATIONS: Record<Locale, TranslationDict> = {
         title: 'Panoramica del Villaggio',
         description: 'Ammira tutto il diorama tra aurora boreale, luci calde e neve fresca.',
         actionLabel: 'Prova di volo Slitta',
+        shortActionLabel: 'Vola Slitta',
       },
       tree: {
         label: 'Grande Albero',
         title: 'Piazza del Grande Albero',
         description: 'Il cuore della festa con il trenino giocattolo e i pupazzi di neve.',
         actionLabel: 'Accendi la Stella',
+        shortActionLabel: 'Stella',
       },
       workshop: {
         label: 'Laboratorio',
         title: 'Laboratorio degli Elfi',
         description: 'Qui gli elfi impacchettano i regali prima di portarli alla slitta.',
         actionLabel: 'Turbo Giocattoli',
+        shortActionLabel: 'Turbo Elfi',
       },
       sleigh: {
         label: 'Slitta & Renne',
         title: 'Stalla delle Renne e Slitta',
         description: 'Le renne scalpitano pronte a sollevare la slitta carica di doni.',
         actionLabel: 'Fai volare la Slitta!',
+        shortActionLabel: 'Decolla!',
       },
       cabin: {
         label: 'Casa di Babbo',
         title: 'Chalet di Babbo Natale',
         description: 'Camino acceso, biscotti sul tavolo e la cassetta delle letterine.',
         actionLabel: 'Spedisci Letterina',
+        shortActionLabel: 'Letterina',
       },
     },
     musicRegionLabel: 'Lettore musicale natalizio',
@@ -195,6 +203,7 @@ export const TRANSLATIONS: Record<Locale, TranslationDict> = {
     motionPause: 'Pause animations',
     motionResume: 'Resume animations',
     languageSwitchLabel: 'Passa a Italiano',
+    controlsMenuOpen: 'Controls & music',
     creditsOpen: 'Info & Credits',
     creditsTitle: 'Village Guide & Open Source Credits',
     creditsClose: 'Close',
@@ -216,30 +225,35 @@ export const TRANSLATIONS: Record<Locale, TranslationDict> = {
         title: 'Village Panorama',
         description: 'Take in the entire North Pole diorama under the aurora borealis.',
         actionLabel: 'Sleigh Test Flight',
+        shortActionLabel: 'Fly Sleigh',
       },
       tree: {
         label: 'Great Tree',
         title: 'Great Tree Plaza',
         description: 'Heart of the village with the chugging toy train and jolly snowmen.',
         actionLabel: 'Sparkle Tree Star',
+        shortActionLabel: 'Star Glow',
       },
       workshop: {
         label: 'Workshop',
         title: "Elves' Toy Workshop",
         description: 'Elves craft, wrap, and carry presents straight toward the sleigh.',
         actionLabel: 'Boost Workshop',
+        shortActionLabel: 'Boost Elves',
       },
       sleigh: {
         label: 'Sleigh',
         title: 'Reindeer Paddock & Sleigh',
         description: 'Ready for liftoff with glowing harness bells and gift sacks.',
         actionLabel: 'Launch Sleigh Flight!',
+        shortActionLabel: 'Liftoff!',
       },
       cabin: {
         label: "Santa's Cabin",
         title: "Santa's Cozy Chalet",
         description: 'Crackling hearth, warm timber glow, and the North Pole mailbox.',
         actionLabel: 'Send Wish Letter',
+        shortActionLabel: 'Send Wish',
       },
     },
     musicRegionLabel: 'Christmas music player',

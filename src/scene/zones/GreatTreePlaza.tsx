@@ -1,6 +1,6 @@
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef, useState } from 'react';
+import { Suspense, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { enhanceHolidayGltf, smoothMeshNormalsInPlace } from '../../assets/enhanceMaterials';
 import { MODEL_PATHS, type ModelKey } from '../../assets/modelRegistry';
@@ -319,7 +319,9 @@ export function GreatTreePlaza() {
           }}
         >
           <group ref={locoRef}>
-            <SmoothedTrainCar model="trainLocomotive" />
+            <Suspense fallback={null}>
+              <SmoothedTrainCar model="trainLocomotive" />
+            </Suspense>
             <ChimneySmoke
               position={[0, 0.65, 0.18]}
               count={8}
@@ -329,13 +331,19 @@ export function GreatTreePlaza() {
             />
           </group>
           <group ref={tenderRef}>
-            <SmoothedTrainCar model="trainTender" />
+            <Suspense fallback={null}>
+              <SmoothedTrainCar model="trainTender" />
+            </Suspense>
           </group>
           <group ref={wagon1Ref}>
-            <SmoothedTrainCar model="trainWagon" />
+            <Suspense fallback={null}>
+              <SmoothedTrainCar model="trainWagon" />
+            </Suspense>
           </group>
           <group ref={wagon2Ref}>
-            <SmoothedTrainCar model="trainWagonLogs" />
+            <Suspense fallback={null}>
+              <SmoothedTrainCar model="trainWagonLogs" />
+            </Suspense>
           </group>
         </group>
       </group>

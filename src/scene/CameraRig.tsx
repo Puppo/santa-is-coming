@@ -1,6 +1,7 @@
 import { CameraControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { type ComponentRef, useEffect, useRef } from 'react';
+import * as THREE from 'three';
 import { useVillage } from '../state/villageStore';
 import { ZONE_CAMERA_PRESETS } from './terrainMath';
 
@@ -8,36 +9,52 @@ export function CameraRig() {
   const controlsRef = useRef<ComponentRef<typeof CameraControls>>(null);
   const { activeZone, motionPaused } = useVillage();
   const size = useThree((s) => s.size);
+  const camera = useThree((s) => s.camera);
   const isFirstMount = useRef(true);
 
-  const isPortrait = size.width < size.height;
+  const isPortrait = size.width > 0 && size.height > 0 && size.width < size.height;
 
   useEffect(() => {
+    if (size.width === 0 || size.height === 0) return;
+
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const targetFov = isPortrait ? 54 : 44;
+      if (camera.fov !== targetFov) {
+        camera.fov = targetFov;
+        camera.updateProjectionMatrix();
+      }
+    }
+
     const controls = controlsRef.current;
     if (!controls) return;
     const preset = ZONE_CAMERA_PRESETS[activeZone];
     const animate = !isFirstMount.current && !motionPaused;
     isFirstMount.current = false;
 
-    const zoomOut = isPortrait ? (activeZone === 'overview' ? 1.32 : 1.22) : 1.0;
+    if (isPortrait && activeZone === 'overview') {
+      void controls.setLookAt(0.35, 11.4, 27.2, 0, 1.35, 0.8, animate);
+      return;
+    }
+
+    const zoomOut = isPortrait ? 1.14 : 1.0;
 
     void controls.setLookAt(
       preset.position[0] * zoomOut,
-      preset.position[1] * (isPortrait && activeZone === 'overview' ? 1.18 : 1.0),
+      preset.position[1],
       preset.position[2] * zoomOut,
       preset.target[0],
       preset.target[1],
       preset.target[2],
       animate,
     );
-  }, [activeZone, motionPaused, isPortrait]);
+  }, [activeZone, motionPaused, isPortrait, camera, size.width, size.height]);
 
   return (
     <CameraControls
       ref={controlsRef}
       makeDefault
       minDistance={5.5}
-      maxDistance={36}
+      maxDistance={40}
       minPolarAngle={0.22}
       maxPolarAngle={Math.PI * 0.455}
       smoothTime={0.65}

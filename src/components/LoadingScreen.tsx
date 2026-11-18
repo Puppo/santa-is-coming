@@ -1,21 +1,34 @@
 import { useProgress } from '@react-three/drei';
 import { Sparkles } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TranslationDict } from '../i18n/translations';
 
 export function LoadingScreen({ t }: { t: TranslationDict }) {
   const { active, progress } = useProgress();
   const [dismissed, setDismissed] = useState(false);
+  const hasActivatedRef = useRef(false);
+
+  if (active) {
+    hasActivatedRef.current = true;
+  }
 
   useEffect(() => {
-    if (!active && progress >= 100) {
-      const id = window.setTimeout(() => setDismissed(true), 450);
+    if (!active && (progress >= 100 || hasActivatedRef.current)) {
+      const id = window.setTimeout(() => setDismissed(true), 350);
       return () => window.clearTimeout(id);
     }
-    // Failsafe in case cached assets resolve instantaneously or WebGL is mocked in tests
-    const maxWait = window.setTimeout(() => setDismissed(true), 3200);
-    return () => window.clearTimeout(maxWait);
+    if (!active && !hasActivatedRef.current) {
+      const idleId = window.setTimeout(() => setDismissed(true), 900);
+      return () => window.clearTimeout(idleId);
+    }
+    return undefined;
   }, [active, progress]);
+
+  // Absolute failsafe so a stalled network request never traps the user permanently
+  useEffect(() => {
+    const maxWait = window.setTimeout(() => setDismissed(true), 14000);
+    return () => window.clearTimeout(maxWait);
+  }, []);
 
   if (dismissed) return null;
 

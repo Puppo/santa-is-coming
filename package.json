@@ -16,6 +16,7 @@
     "format": "biome format --write ."
   },
   "dependencies": {
+    "@oddbird/popover-polyfill": "^0.7.3",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.2",
     "@react-three/postprocessing": "^3.2.2",

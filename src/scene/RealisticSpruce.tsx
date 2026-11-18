@@ -381,7 +381,6 @@ export function HeroChristmasSpruce({
           <octahedronGeometry args={[0.21, 0]} />
           <meshStandardMaterial color="#f5c451" metalness={0.9} roughness={0.18} />
         </mesh>
-        <pointLight color="#ffd670" intensity={5.2} distance={9} decay={1.8} />
       </group>
     </group>
   );

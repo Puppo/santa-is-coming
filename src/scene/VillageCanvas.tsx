@@ -1,6 +1,6 @@
 import { PerformanceMonitor, useGLTF } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { Component, type ReactNode, Suspense, useState } from 'react';
+import { Component, type ReactNode, Suspense, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { MODEL_PATHS } from '../assets/modelRegistry';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
@@ -9,10 +9,11 @@ import { CameraRig } from './CameraRig';
 import { ElfSquad } from './characters/ElfSquad';
 import { HolidayGrump } from './characters/HolidayGrump';
 import { RiggedSanta } from './characters/RiggedSanta';
+import { isMobileGpuDevice } from './deviceProfile';
 import { FairyGarlands } from './FairyGarlands';
 import { PostEffects } from './PostEffects';
 import { Snowfall } from './Snowfall';
-import { TerrainDiorama } from './TerrainDiorama';
+import { ProceduralTerrainFallback, TerrainDiorama } from './TerrainDiorama';
 import { ElfWorkshop } from './zones/ElfWorkshop';
 import { GreatTreePlaza } from './zones/GreatTreePlaza';
 import { PineWoods } from './zones/PineWoods';
@@ -58,8 +59,9 @@ class SceneErrorBoundary extends Component<{ children: ReactNode }, BoundaryStat
 }
 
 export function VillageCanvas() {
-  const [dpr, setDpr] = useState<[number, number]>([1, 2]);
-  const [enablePostFx, setEnablePostFx] = useState(true);
+  const initialMobile = useMemo(() => isMobileGpuDevice(), []);
+  const [dpr, setDpr] = useState<[number, number]>(initialMobile ? [1, 1.5] : [1, 2]);
+  const [enablePostFx, setEnablePostFx] = useState(!initialMobile);
 
   return (
     <SceneErrorBoundary>
@@ -69,10 +71,10 @@ export function VillageCanvas() {
           dpr={dpr}
           camera={{ position: [0.3, 10.4, 24.5], fov: 44, near: 0.2, far: 160 }}
           gl={{
-            antialias: true,
+            antialias: !initialMobile,
             toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: 1.08,
-            powerPreference: 'high-performance',
+            toneMappingExposure: initialMobile ? 1.14 : 1.08,
+            powerPreference: initialMobile ? 'default' : 'high-performance',
           }}
         >
           <PerformanceMonitor
@@ -81,31 +83,44 @@ export function VillageCanvas() {
               setEnablePostFx(false);
             }}
             onIncline={() => {
-              setDpr([1, 2]);
-              setEnablePostFx(true);
+              setDpr(initialMobile ? [1, 1.5] : [1, 2]);
+              setEnablePostFx(!initialMobile);
             }}
           />
 
           <Atmosphere />
           <CameraRig />
 
+          {/* Immediate zero-network village motion, snow, garlands & characters */}
+          <FairyGarlands />
+          <Snowfall count={initialMobile ? 480 : enablePostFx ? 1100 : 550} />
+          <ElfSquad />
+          <RiggedSanta />
+          <HolidayGrump />
+
+          {/* Terrain streams PBR maps progressively over an instant procedural island */}
+          <Suspense fallback={<ProceduralTerrainFallback />}>
+            <TerrainDiorama mobileGpu={initialMobile} />
+          </Suspense>
+
+          {/* Zones stream in independently so no single asset blocks the whole diorama */}
           <Suspense fallback={null}>
-            <TerrainDiorama />
-            <FairyGarlands />
-            <Snowfall count={enablePostFx ? 1100 : 550} />
-
-            {/* Village Zones */}
             <GreatTreePlaza />
+          </Suspense>
+          <Suspense fallback={null}>
             <ElfWorkshop />
+          </Suspense>
+          <Suspense fallback={null}>
             <SantaCabin />
+          </Suspense>
+          <Suspense fallback={null}>
             <SleighPaddock />
+          </Suspense>
+          <Suspense fallback={null}>
             <PineWoods />
+          </Suspense>
 
-            {/* Animated Characters */}
-            <ElfSquad />
-            <RiggedSanta />
-            <HolidayGrump />
-
+          <Suspense fallback={null}>
             <PostEffects enabled={enablePostFx} />
           </Suspense>
         </Canvas>

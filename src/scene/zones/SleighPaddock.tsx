@@ -165,6 +165,15 @@ export function SleighPaddock() {
       />
       <VictorianStreetLamp position={[2.4, getGroundHeight(2.4, 8.0), 8.0]} lightIntensity={2.8} />
 
+      {/* Shared warm paddock illumination for the sleigh & reindeer team */}
+      <pointLight
+        position={[-1.0, 2.8, 8.8]}
+        color="#ffaf54"
+        intensity={6.5}
+        distance={12}
+        decay={1.8}
+      />
+
       {/* Wrapped Satin Presents on the Snow Waiting to be Loaded */}
       <RealisticGift
         position={[-3.3, getGroundHeight(-3.3, 9.1), 9.1]}

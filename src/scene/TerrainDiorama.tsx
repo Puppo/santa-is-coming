@@ -2,6 +2,7 @@ import { MeshReflectorMaterial } from '@react-three/drei';
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useCobblePbr, useSnowPbr, useWoodPbr } from '../assets/pbrMaterials';
+import { getIceTextures, getSnowTextures, getTimberTextures } from '../assets/proceduralTextures';
 import { getGroundHeight, ISLAND_RADIUS } from './terrainMath';
 
 const PATH_CURVES = [
@@ -28,46 +29,90 @@ const PATH_CURVES = [
   ],
 ];
 
-export function TerrainDiorama() {
+function buildSnowIslandGeometry(): THREE.BufferGeometry {
+  const disc = new THREE.PlaneGeometry(ISLAND_RADIUS * 2, ISLAND_RADIUS * 2, 128, 128);
+  disc.rotateX(-Math.PI / 2);
+  const pos = disc.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const colA = new THREE.Color('#ffffff');
+  const colB = new THREE.Color('#dde8f6');
+  const tmpCol = new THREE.Color();
+
+  for (let i = 0; i < pos.count; i++) {
+    let x = pos.getX(i);
+    let z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    if (r > ISLAND_RADIUS) {
+      const scale = ISLAND_RADIUS / r;
+      x *= scale;
+      z *= scale;
+      pos.setX(i, x);
+      pos.setZ(i, z);
+    }
+    const h = getGroundHeight(x, z);
+    pos.setY(i, h);
+
+    const shade = Math.max(0, Math.min(1, (h + 0.35) / 2.2));
+    tmpCol.copy(colB).lerp(colA, shade);
+    colors[i * 3] = tmpCol.r;
+    colors[i * 3 + 1] = tmpCol.g;
+    colors[i * 3 + 2] = tmpCol.b;
+  }
+
+  disc.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  disc.computeVertexNormals();
+  return disc;
+}
+
+/** Zero-network fallback island so Frame 1 shows snow and timber even before PBR downloads. */
+export function ProceduralTerrainFallback() {
+  const snow = useMemo(() => getSnowTextures(), []);
+  const wood = useMemo(() => getTimberTextures(), []);
+  const ice = useMemo(() => getIceTextures(), []);
+  const snowGeometry = useMemo(() => buildSnowIslandGeometry(), []);
+
+  return (
+    <group name="terrain-diorama-fallback">
+      <mesh geometry={snowGeometry} receiveShadow>
+        <meshStandardMaterial
+          map={snow.map}
+          bumpMap={snow.bumpMap}
+          bumpScale={0.04}
+          roughnessMap={snow.roughnessMap}
+          roughness={0.86}
+          vertexColors
+        />
+      </mesh>
+      <mesh position={[0, -1.72, 0]} receiveShadow>
+        <cylinderGeometry args={[ISLAND_RADIUS + 0.15, ISLAND_RADIUS + 0.55, 2.2, 64]} />
+        <meshStandardMaterial map={wood.map} color="#633f28" roughness={0.68} metalness={0.05} />
+      </mesh>
+      <mesh position={[0, -0.66, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[ISLAND_RADIUS + 0.16, 0.11, 10, 72]} />
+        <meshStandardMaterial color="#b48a46" roughness={0.28} metalness={0.85} />
+      </mesh>
+      <mesh position={[5.6, -0.14, 5.4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <circleGeometry args={[3.35, 48]} />
+        <meshStandardMaterial
+          color="#82b4cf"
+          bumpMap={ice.bumpMap}
+          bumpScale={0.02}
+          roughnessMap={ice.roughnessMap}
+          roughness={0.18}
+          metalness={0.22}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+export function TerrainDiorama({ mobileGpu = false }: { mobileGpu?: boolean }) {
   const snowPbr = useSnowPbr(12);
   const woodPbr = useWoodPbr(6, 1);
   const cobblePbr = useCobblePbr(4);
   const stonePathPbr = useCobblePbr(1.2);
 
-  const snowGeometry = useMemo(() => {
-    const disc = new THREE.PlaneGeometry(ISLAND_RADIUS * 2, ISLAND_RADIUS * 2, 128, 128);
-    disc.rotateX(-Math.PI / 2);
-    const pos = disc.attributes.position;
-    const colors = new Float32Array(pos.count * 3);
-    const colA = new THREE.Color('#ffffff');
-    const colB = new THREE.Color('#dde8f6');
-    const tmpCol = new THREE.Color();
-
-    for (let i = 0; i < pos.count; i++) {
-      let x = pos.getX(i);
-      let z = pos.getZ(i);
-      const r = Math.hypot(x, z);
-      if (r > ISLAND_RADIUS) {
-        const scale = ISLAND_RADIUS / r;
-        x *= scale;
-        z *= scale;
-        pos.setX(i, x);
-        pos.setZ(i, z);
-      }
-      const h = getGroundHeight(x, z);
-      pos.setY(i, h);
-
-      const shade = Math.max(0, Math.min(1, (h + 0.35) / 2.2));
-      tmpCol.copy(colB).lerp(colA, shade);
-      colors[i * 3] = tmpCol.r;
-      colors[i * 3 + 1] = tmpCol.g;
-      colors[i * 3 + 2] = tmpCol.b;
-    }
-
-    disc.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    disc.computeVertexNormals();
-    return disc;
-  }, []);
+  const snowGeometry = useMemo(() => buildSnowIslandGeometry(), []);
 
   const steppingStones = useMemo(() => {
     const stones: Array<{
@@ -146,24 +191,34 @@ export function TerrainDiorama() {
         />
       </mesh>
 
-      {/* Real-Time Reflective Frozen Skating Pond */}
+      {/* Real-Time Reflective Frozen Skating Pond (glossy ice fallback on mobile GPUs) */}
       <mesh position={[5.6, -0.14, 5.4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[3.35, 56]} />
-        <MeshReflectorMaterial
-          resolution={512}
-          blur={[240, 80]}
-          mixBlur={0.75}
-          mixStrength={1.35}
-          mirror={0.58}
-          roughness={0.2}
-          depthScale={0.4}
-          minDepthThreshold={0.5}
-          maxDepthThreshold={1.2}
-          color="#7faec9"
-          metalness={0.18}
-          normalMap={snowPbr.normalMap}
-          normalScale={new THREE.Vector2(0.08, 0.08)}
-        />
+        {mobileGpu ? (
+          <meshStandardMaterial
+            color="#82b4cf"
+            roughness={0.14}
+            metalness={0.22}
+            normalMap={snowPbr.normalMap}
+            normalScale={new THREE.Vector2(0.08, 0.08)}
+          />
+        ) : (
+          <MeshReflectorMaterial
+            resolution={512}
+            blur={[240, 80]}
+            mixBlur={0.75}
+            mixStrength={1.35}
+            mirror={0.58}
+            roughness={0.2}
+            depthScale={0.4}
+            minDepthThreshold={0.5}
+            maxDepthThreshold={1.2}
+            color="#7faec9"
+            metalness={0.18}
+            normalMap={snowPbr.normalMap}
+            normalScale={new THREE.Vector2(0.08, 0.08)}
+          />
+        )}
       </mesh>
 
       {/* Snow-Dusted Cobblestone Path Stones */}

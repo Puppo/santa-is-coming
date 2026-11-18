@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MODEL_PATHS } from '../assets/modelRegistry';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
@@ -113,5 +113,65 @@ describe('Accessible HUD & Controls', () => {
     expect(dialog).toBeTruthy();
     expect(dialog?.hasAttribute('role')).toBe(false);
     expect(dialog?.hasAttribute('aria-modal')).toBe(false);
+  });
+
+  it('renders compact mobile HUD with 1-tap music control, popover controls panel, and 👀 Grump badge', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <VillageProvider>
+          <HeaderHud
+            t={TRANSLATIONS.it}
+            locale="it"
+            isCompact={true}
+            onToggleLocale={vi.fn()}
+            onOpenCredits={vi.fn()}
+          />
+          <ZoneDock t={TRANSLATIONS.it} isCompact={true} />
+        </VillageProvider>,
+      );
+
+      // Single H1 and no standalone subtitle clutter
+      expect(
+        screen.getByRole('heading', { level: 1, name: TRANSLATIONS.it.appTitle }),
+      ).toBeTruthy();
+
+      // 1-tap music play toggle right in the compact top bar
+      expect(screen.getByRole('button', { name: TRANSLATIONS.it.musicPlay })).toBeTruthy();
+
+      // Popover trigger omits role="menu" and aria-haspopup per native button-group popover guidance
+      const popoverTrigger = screen.getByRole('button', { name: TRANSLATIONS.it.controlsMenuOpen });
+      const targetId = popoverTrigger.getAttribute('popovertarget');
+      expect(targetId).toBeTruthy();
+      expect(popoverTrigger.hasAttribute('aria-haspopup')).toBe(false);
+      expect(popoverTrigger.getAttribute('role')).toBeNull();
+
+      const popoverEl = targetId ? document.getElementById(targetId) : null;
+      expect(popoverEl?.getAttribute('popover')).toBe('auto');
+
+      // ZoneDock uses crisp mobile CTA label without multi-line description banner
+      expect(screen.getByText(TRANSLATIONS.it.zones.overview.shortActionLabel)).toBeTruthy();
+
+      // Summon & catch Grump, then verify 👀 remains visible alongside pranks count badge
+      const summonBtn = screen.getByRole('button', {
+        name: new RegExp(TRANSLATIONS.it.grumpSummon),
+      });
+      fireEvent.click(summonBtn);
+      const shooBtn = document.querySelector('.hud-btn-danger');
+      expect(shooBtn).toBeTruthy();
+      if (shooBtn) fireEvent.click(shooBtn);
+
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+
+      const updatedGrumpBtn = screen.getByRole('button', {
+        name: `${TRANSLATIONS.it.grumpSummon} (${TRANSLATIONS.it.grumpPranksLabel}: 1)`,
+      });
+      expect(updatedGrumpBtn.textContent).toContain('👀');
+      expect(updatedGrumpBtn.textContent).toContain('1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

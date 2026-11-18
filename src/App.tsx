@@ -5,12 +5,14 @@ import { InteractiveToast } from './components/InteractiveToast';
 import { LoadingScreen } from './components/LoadingScreen';
 import { MusicPlayerBar } from './components/MusicPlayerBar';
 import { ZoneDock } from './components/ZoneDock';
+import { useCompactViewport } from './hooks/useCompactViewport';
 import { useLocale } from './i18n/useLocale';
 import { VillageCanvas } from './scene/VillageCanvas';
 import { VillageProvider } from './state/villageStore';
 
 export function AppContent() {
   const { locale, toggleLocale, t } = useLocale();
+  const isCompact = useCompactViewport();
   const [creditsOpen, setCreditsOpen] = useState(false);
 
   return (
@@ -22,6 +24,7 @@ export function AppContent() {
       <HeaderHud
         t={t}
         locale={locale}
+        isCompact={isCompact}
         onToggleLocale={toggleLocale}
         onOpenCredits={() => setCreditsOpen(true)}
       />
@@ -32,8 +35,8 @@ export function AppContent() {
       </main>
 
       <div id="village-controls" className="hud-bottom-dock" tabIndex={-1}>
-        <ZoneDock t={t} />
-        <MusicPlayerBar t={t} />
+        <ZoneDock t={t} isCompact={isCompact} />
+        {!isCompact && <MusicPlayerBar t={t} />}
       </div>
 
       <CreditsDialog open={creditsOpen} onClose={() => setCreditsOpen(false)} t={t} />

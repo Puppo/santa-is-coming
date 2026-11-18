@@ -1,6 +1,6 @@
 import { useAnimations, useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { enhanceHolidayGltf, smoothMeshNormalsInPlace } from '../../assets/enhanceMaterials';
@@ -150,10 +150,13 @@ function ReindeerUnit({
         {isRudolph && (
           <group position={[0, 1.13, 0.96]}>
             <mesh>
-              <sphereGeometry args={[0.068, 14, 14]} />
-              <meshBasicMaterial color={[3.4, 0.35, 0.35]} toneMapped={false} />
+              <sphereGeometry args={[0.072, 14, 14]} />
+              <meshBasicMaterial color={[3.6, 0.35, 0.35]} toneMapped={false} />
             </mesh>
-            <pointLight color="#ff3b3b" intensity={2.4} distance={4.5} decay={2} />
+            <mesh>
+              <sphereGeometry args={[0.16, 10, 10]} />
+              <meshBasicMaterial color="#ff3b3b" transparent opacity={0.22} depthWrite={false} />
+            </mesh>
           </group>
         )}
       </group>
@@ -170,7 +173,7 @@ const TEAM_OFFSETS: Array<{ pos: [number, number, number]; isRudolph?: boolean }
   { pos: [0.62, 0, 5.25], isRudolph: true },
 ];
 
-export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
+function ReindeerHerdInner({ isFlying }: { isFlying: boolean }) {
   const { motionPaused, partyMode, announceKey } = useVillage();
 
   const handlePrance = () => {
@@ -179,14 +182,7 @@ export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
   };
 
   return (
-    <group name="reindeer-herd">
-      {[-0.45, 0.45].map((x) => (
-        <mesh key={`trace-${x}`} position={[x, 0.56, 3.1]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.018, 0.018, 4.4, 6]} />
-          <meshStandardMaterial color="#583018" roughness={0.72} />
-        </mesh>
-      ))}
-
+    <group name="reindeer-herd-models">
       {TEAM_OFFSETS.map((unit, idx) => (
         <ReindeerUnit
           key={`reindeer-${unit.pos[0]}-${unit.pos[2]}`}
@@ -199,6 +195,22 @@ export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
           onPrance={handlePrance}
         />
       ))}
+    </group>
+  );
+}
+
+export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
+  return (
+    <group name="reindeer-herd">
+      {[-0.45, 0.45].map((x) => (
+        <mesh key={`trace-${x}`} position={[x, 0.56, 3.1]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.018, 0.018, 4.4, 6]} />
+          <meshStandardMaterial color="#583018" roughness={0.72} />
+        </mesh>
+      ))}
+      <Suspense fallback={null}>
+        <ReindeerHerdInner isFlying={isFlying} />
+      </Suspense>
     </group>
   );
 }

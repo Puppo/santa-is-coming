@@ -6,6 +6,7 @@ import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
 import { christmasAudioEngine } from '../audio/audioEngine';
 import type { AtmosphereMode } from '../i18n/translations';
 import { useVillage } from '../state/villageStore';
+import { isMobileGpuDevice } from './deviceProfile';
 
 interface AtmospherePreset {
   bg: string;
@@ -111,6 +112,7 @@ const AURORA_FRAG = /* glsl */ `
 export function Atmosphere() {
   const { atmosphere, motionPaused, partyMode, isMusicPlaying } = useVillage();
   const cfg = ATMOSPHERE_CONFIG[atmosphere];
+  const mobileGpu = useMemo(() => isMobileGpuDevice(), []);
 
   const auroraMatRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -176,7 +178,7 @@ export function Atmosphere() {
         position={cfg.sunPos}
         color={cfg.sunColor}
         intensity={cfg.sunIntensity}
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={mobileGpu ? [1024, 1024] : [2048, 2048]}
         shadow-camera-near={2}
         shadow-camera-far={72}
         shadow-camera-left={-23}
@@ -190,17 +192,19 @@ export function Atmosphere() {
       {/* Cool rim light to separate cabin silhouettes and snow drifts */}
       <directionalLight position={[14, 10, -18]} color="#7db4ff" intensity={0.45} />
 
-      {/* Grounding contact shadows across central plaza */}
-      <ContactShadows
-        position={[0, 0.02, 1.5]}
-        opacity={0.34}
-        scale={34}
-        blur={2.1}
-        far={5}
-        resolution={512}
-        frames={1}
-        color="#091529"
-      />
+      {/* Grounding contact shadows across central plaza (desktop GPUs only) */}
+      {!mobileGpu && (
+        <ContactShadows
+          position={[0, 0.02, 1.5]}
+          opacity={0.34}
+          scale={34}
+          blur={2.1}
+          far={5}
+          resolution={512}
+          frames={1}
+          color="#091529"
+        />
+      )}
 
       {/* Arctic Stars */}
       {cfg.starsOpacity > 0 && (

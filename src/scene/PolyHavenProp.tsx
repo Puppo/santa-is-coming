@@ -1,17 +1,13 @@
 import { useGLTF } from '@react-three/drei';
 import type { ThreeElements } from '@react-three/fiber';
-import { useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
 import * as THREE from 'three';
 import { enhanceHolidayGltf } from '../assets/enhanceMaterials';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
 
 type GroupProps = ThreeElements['group'];
 
-export function VictorianStreetLamp({
-  lightIntensity = 2.6,
-  lightColor = '#ffaf54',
-  ...props
-}: GroupProps & { lightIntensity?: number; lightColor?: string }) {
+function StreetLampMesh() {
   const gltf = useGLTF(POLYHAVEN_PATHS.streetLamp);
 
   const cloned = useMemo(() => {
@@ -30,26 +26,43 @@ export function VictorianStreetLamp({
     return copy;
   }, [gltf.scene]);
 
+  return <primitive object={cloned} scale={0.78} />;
+}
+
+export function VictorianStreetLamp({
+  lightIntensity = 0,
+  lightColor = '#ffaf54',
+  enablePointLight = false,
+  ...props
+}: GroupProps & { lightIntensity?: number; lightColor?: string; enablePointLight?: boolean }) {
   return (
     <group {...props}>
-      <primitive object={cloned} scale={0.78} />
-      {/* Warm tungsten bulb core inside glass lantern housing */}
+      <Suspense fallback={null}>
+        <StreetLampMesh />
+      </Suspense>
+      {/* Warm HDR tungsten bulb core & translucent warm halo (avoids per-pixel pointLight overhead) */}
       <mesh position={[0, 2.74, 0]}>
-        <sphereGeometry args={[0.065, 10, 10]} />
-        <meshBasicMaterial color={[2.8, 1.9, 0.85]} toneMapped={false} />
+        <sphereGeometry args={[0.075, 10, 10]} />
+        <meshBasicMaterial color={[3.1, 2.05, 0.9]} toneMapped={false} />
       </mesh>
-      <pointLight
-        position={[0, 2.72, 0]}
-        color={lightColor}
-        intensity={lightIntensity}
-        distance={8.5}
-        decay={1.9}
-      />
+      <mesh position={[0, 2.74, 0]}>
+        <sphereGeometry args={[0.24, 10, 10]} />
+        <meshBasicMaterial color={lightColor} transparent opacity={0.18} depthWrite={false} />
+      </mesh>
+      {enablePointLight && lightIntensity > 0 && (
+        <pointLight
+          position={[0, 2.72, 0]}
+          color={lightColor}
+          intensity={lightIntensity}
+          distance={8.5}
+          decay={1.9}
+        />
+      )}
     </group>
   );
 }
 
-export function PhotogrammetryBench(props: GroupProps) {
+function BenchMesh() {
   const gltf = useGLTF(POLYHAVEN_PATHS.woodenBench);
 
   const cloned = useMemo(() => {
@@ -58,17 +71,20 @@ export function PhotogrammetryBench(props: GroupProps) {
     return copy;
   }, [gltf.scene]);
 
+  return <primitive object={cloned} scale={1.35} />;
+}
+
+export function PhotogrammetryBench(props: GroupProps) {
   return (
     <group {...props}>
-      <primitive object={cloned} scale={1.35} />
+      <Suspense fallback={null}>
+        <BenchMesh />
+      </Suspense>
     </group>
   );
 }
 
-export function WarmWoodenLantern({
-  lightIntensity = 1.8,
-  ...props
-}: GroupProps & { lightIntensity?: number }) {
+function WoodenLanternMesh() {
   const gltf = useGLTF(POLYHAVEN_PATHS.woodenLantern);
 
   const cloned = useMemo(() => {
@@ -77,15 +93,29 @@ export function WarmWoodenLantern({
     return copy;
   }, [gltf.scene]);
 
+  return <primitive object={cloned} scale={0.85} position={[0, 0.132, 0]} />;
+}
+
+export function WarmWoodenLantern({
+  lightIntensity = 0,
+  enablePointLight = false,
+  ...props
+}: GroupProps & { lightIntensity?: number; enablePointLight?: boolean }) {
   // wooden_lantern_01 bottom is at -0.155 in model space
   return (
     <group {...props}>
-      <primitive object={cloned} scale={0.85} position={[0, 0.132, 0]} />
+      <Suspense fallback={null}>
+        <WoodenLanternMesh />
+      </Suspense>
       <mesh position={[0, 0.21, 0]}>
-        <sphereGeometry args={[0.032, 8, 8]} />
-        <meshBasicMaterial color={[2.8, 1.85, 0.7]} toneMapped={false} />
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshBasicMaterial color={[3.1, 2.0, 0.78]} toneMapped={false} />
       </mesh>
-      {lightIntensity > 0 && (
+      <mesh position={[0, 0.21, 0]}>
+        <sphereGeometry args={[0.14, 8, 8]} />
+        <meshBasicMaterial color="#ffb155" transparent opacity={0.16} depthWrite={false} />
+      </mesh>
+      {enablePointLight && lightIntensity > 0 && (
         <pointLight
           position={[0, 0.25, 0]}
           color="#ffb155"

@@ -1,6 +1,7 @@
 import { useTexture } from '@react-three/drei';
 import { useMemo } from 'react';
 import * as THREE from 'three';
+import { isMobileGpuDevice } from '../scene/deviceProfile';
 import { withBase } from './baseUrl';
 
 export const POLYHAVEN_PATHS = {
@@ -35,19 +36,43 @@ export interface ScannedPbrMaps {
   aoMap: THREE.Texture;
 }
 
+const configuredTextureCache = new Map<string, THREE.Texture>();
+
 function configureMap(
   source: THREE.Texture,
   repeatX: number,
   repeatY: number,
   isColor: boolean,
 ): THREE.Texture {
+  const key = `${source.uuid}:${repeatX}:${repeatY}:${isColor ? 1 : 0}`;
+  const cached = configuredTextureCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
   const tex = source.clone();
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeatX, repeatY);
-  tex.anisotropy = 8;
+  tex.anisotropy = isMobileGpuDevice() ? 4 : 8;
   tex.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   tex.needsUpdate = true;
+  configuredTextureCache.set(key, tex);
+  return tex;
+}
+
+function configureSingleMap(source: THREE.Texture, isColor: boolean): THREE.Texture {
+  const key = `single:${source.uuid}:${isColor ? 1 : 0}`;
+  const cached = configuredTextureCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const tex = source.clone();
+  tex.anisotropy = isMobileGpuDevice() ? 4 : 8;
+  tex.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  tex.needsUpdate = true;
+  configuredTextureCache.set(key, tex);
   return tex;
 }
 
@@ -123,21 +148,9 @@ export function useFirFoliagePbr() {
   ]);
 
   return useMemo(() => {
-    const td = twigDiff.clone();
-    td.colorSpace = THREE.SRGBColorSpace;
-    td.anisotropy = 8;
-    td.needsUpdate = true;
-
-    const ta = twigAlpha.clone();
-    ta.colorSpace = THREE.NoColorSpace;
-    ta.anisotropy = 8;
-    ta.needsUpdate = true;
-
-    const tn = twigNor.clone();
-    tn.colorSpace = THREE.NoColorSpace;
-    tn.anisotropy = 8;
-    tn.needsUpdate = true;
-
+    const td = configureSingleMap(twigDiff, true);
+    const ta = configureSingleMap(twigAlpha, false);
+    const tn = configureSingleMap(twigNor, false);
     const bd = configureMap(barkDiff, 2, 4, true);
     const bn = configureMap(barkNor, 2, 4, false);
 

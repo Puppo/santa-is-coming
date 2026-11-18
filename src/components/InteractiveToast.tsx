@@ -11,7 +11,7 @@ function resolveMessage(t: TranslationDict, key: string): string {
 }
 
 export function InteractiveToast({ t }: { t: TranslationDict }) {
-  const { toast, grumpState, catchGrump } = useVillage();
+  const { toast, grumpState, catchGrump, dismissToast } = useVillage();
   const grumpActive = grumpState === 'peeking' || grumpState === 'sneaking';
 
   if (!toast && !grumpActive) {
@@ -33,10 +33,19 @@ export function InteractiveToast({ t }: { t: TranslationDict }) {
       aria-live="polite"
       aria-atomic="true"
     >
-      <span>{displayText}</span>
-      {grumpActive && (
+      <span className="toast-copy">{displayText}</span>
+      {grumpActive ? (
         <button type="button" className="hud-btn hud-btn-danger" onClick={catchGrump}>
           {t.grumpShoo}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="toast-close-btn"
+          onClick={dismissToast}
+          aria-label={t.creditsClose}
+        >
+          ×
         </button>
       )}
     </div>

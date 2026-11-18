@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { christmasAudioEngine } from '../audio/audioEngine';
 import {
   playGrumpCaught,
   playGrumpSneak,
@@ -17,6 +18,7 @@ import {
   playWorkshopTinker,
   setSfxMuted,
 } from '../audio/soundEffects';
+import { CHRISTMAS_TRACKS, type ChristmasTrack } from '../audio/tracks';
 import type { AtmosphereMode, ZoneId } from '../i18n/translations';
 
 export type GrumpState = 'idle' | 'peeking' | 'sneaking' | 'caught' | 'escaped';
@@ -37,6 +39,10 @@ interface VillageContextValue {
   setPartyMode: (enabled: boolean) => void;
   isMusicPlaying: boolean;
   setIsMusicPlaying: (playing: boolean) => void;
+  trackIndex: number;
+  currentTrack: ChristmasTrack;
+  toggleMusicPlay: () => Promise<void>;
+  selectTrack: (nextIndex: number) => Promise<void>;
   motionPaused: boolean;
   toggleMotionPaused: () => void;
   sfxEnabled: boolean;
@@ -57,6 +63,7 @@ interface VillageContextValue {
   catchGrump: () => void;
   toast: ToastNotice | null;
   announceKey: (messageKey: string, isGrump?: boolean) => void;
+  dismissToast: () => void;
 }
 
 const VillageContext = createContext<VillageContextValue | null>(null);
@@ -75,6 +82,7 @@ export function VillageProvider({ children }: { children: ReactNode }) {
   const [atmosphere, setAtmosphere] = useState<AtmosphereMode>('night');
   const [partyMode, setPartyMode] = useState(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [trackIndex, setTrackIndex] = useState(0);
   const [motionPaused, setMotionPaused] = useState(prefersReducedMotionInitial);
   const [sfxEnabled, setSfxEnabled] = useState(true);
 
@@ -90,6 +98,7 @@ export function VillageProvider({ children }: { children: ReactNode }) {
 
   const toastCounter = useRef(0);
   const timersRef = useRef<number[]>([]);
+  const currentTrack = CHRISTMAS_TRACKS[trackIndex];
 
   const scheduleTimer = useCallback((fn: () => void, ms: number) => {
     const id = window.setTimeout(fn, ms);
@@ -113,9 +122,38 @@ export function VillageProvider({ children }: { children: ReactNode }) {
       setToast({ id: currentId, messageKey, isGrump });
       scheduleTimer(() => {
         setToast((prev) => (prev && prev.id === currentId ? null : prev));
-      }, 4800);
+      }, 3200);
     },
     [scheduleTimer],
+  );
+
+  const dismissToast = useCallback(() => {
+    setToast(null);
+  }, []);
+
+  const toggleMusicPlay = useCallback(async () => {
+    if (isMusicPlaying) {
+      christmasAudioEngine.pause();
+      setIsMusicPlaying(false);
+      return;
+    }
+    const ok = await christmasAudioEngine.playTrack(currentTrack.src);
+    if (ok) {
+      setIsMusicPlaying(true);
+      setPartyMode(true);
+    }
+  }, [isMusicPlaying, currentTrack.src]);
+
+  const selectTrack = useCallback(
+    async (nextIndex: number) => {
+      const normalized = (nextIndex + CHRISTMAS_TRACKS.length) % CHRISTMAS_TRACKS.length;
+      setTrackIndex(normalized);
+      if (isMusicPlaying) {
+        const ok = await christmasAudioEngine.playTrack(CHRISTMAS_TRACKS[normalized].src);
+        setIsMusicPlaying(ok);
+      }
+    },
+    [isMusicPlaying],
   );
 
   const cycleAtmosphere = useCallback(() => {
@@ -282,6 +320,10 @@ export function VillageProvider({ children }: { children: ReactNode }) {
       setPartyMode,
       isMusicPlaying,
       setIsMusicPlaying,
+      trackIndex,
+      currentTrack,
+      toggleMusicPlay,
+      selectTrack,
       motionPaused,
       toggleMotionPaused,
       sfxEnabled,
@@ -302,6 +344,7 @@ export function VillageProvider({ children }: { children: ReactNode }) {
       catchGrump,
       toast,
       announceKey,
+      dismissToast,
     }),
     [
       activeZone,
@@ -310,6 +353,10 @@ export function VillageProvider({ children }: { children: ReactNode }) {
       partyMode,
       togglePartyMode,
       isMusicPlaying,
+      trackIndex,
+      currentTrack,
+      toggleMusicPlay,
+      selectTrack,
       motionPaused,
       toggleMotionPaused,
       sfxEnabled,
@@ -330,6 +377,7 @@ export function VillageProvider({ children }: { children: ReactNode }) {
       catchGrump,
       toast,
       announceKey,
+      dismissToast,
     ],
   );
 

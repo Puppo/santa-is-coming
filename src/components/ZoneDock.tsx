@@ -4,6 +4,7 @@ import { useVillage } from '../state/villageStore';
 
 interface ZoneDockProps {
   t: TranslationDict;
+  isCompact?: boolean;
 }
 
 const ZONE_ORDER: ZoneId[] = ['overview', 'tree', 'workshop', 'sleigh', 'cabin'];
@@ -23,7 +24,7 @@ function ZoneIcon({ zone }: { zone: ZoneId }) {
   }
 }
 
-export function ZoneDock({ t }: ZoneDockProps) {
+export function ZoneDock({ t, isCompact = false }: ZoneDockProps) {
   const {
     activeZone,
     setActiveZone,
@@ -54,7 +55,7 @@ export function ZoneDock({ t }: ZoneDockProps) {
   const zoneCopy = t.zones[activeZone];
 
   return (
-    <div className="dock-row">
+    <div className="zone-dock-bar">
       <nav className="zone-nav" aria-label={t.zoneNavLabel}>
         {ZONE_ORDER.map((zone) => {
           const isCurrent = activeZone === zone;
@@ -73,16 +74,15 @@ export function ZoneDock({ t }: ZoneDockProps) {
         })}
       </nav>
 
-      <section className="zone-action-card" aria-label={zoneCopy.title}>
-        <div className="zone-action-copy">
-          <h2 className="zone-action-title">{zoneCopy.title}</h2>
-          <p className="zone-action-desc">{zoneCopy.description}</p>
-        </div>
-        <button type="button" className="primary-action-btn" onClick={handleZoneAction}>
-          <Sparkles size={15} aria-hidden="true" />
-          <span>{zoneCopy.actionLabel}</span>
-        </button>
-      </section>
+      <button
+        type="button"
+        className="primary-action-btn"
+        onClick={handleZoneAction}
+        aria-label={zoneCopy.actionLabel}
+      >
+        <Sparkles size={14} aria-hidden="true" />
+        <span>{isCompact ? zoneCopy.shortActionLabel : zoneCopy.actionLabel}</span>
+      </button>
     </div>
   );
 }
