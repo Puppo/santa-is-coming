@@ -32,7 +32,12 @@ export function CameraRig() {
     isFirstMount.current = false;
 
     if (isPortrait && activeZone === 'overview') {
-      void controls.setLookAt(0.35, 11.4, 27.2, 0, 1.35, 0.8, animate);
+      void controls.setLookAt(0.65, 12.0, 28.6, 0.35, 1.35, 1.2, animate);
+      return;
+    }
+
+    if (isPortrait && activeZone === 'sleigh') {
+      void controls.setLookAt(8.8, 5.6, 22.0, 1.9, 1.0, 9.4, animate);
       return;
     }
 

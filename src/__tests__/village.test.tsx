@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { describe, expect, it, vi } from 'vitest';
 import { MODEL_PATHS } from '../assets/modelRegistry';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
@@ -10,6 +12,7 @@ import { HeaderHud } from '../components/HeaderHud';
 import { MusicPlayerBar } from '../components/MusicPlayerBar';
 import { ZoneDock } from '../components/ZoneDock';
 import { TRANSLATIONS } from '../i18n/translations';
+import { createReindeerInstance, prepareReindeerTemplate } from '../scene/characters/ReindeerHerd';
 import { VillageProvider } from '../state/villageStore';
 
 const ROOT_DIR = path.resolve(__dirname, '../..');
@@ -65,6 +68,71 @@ describe('Santa Village Assets & Translations', () => {
     expect(Object.keys(TRANSLATIONS.it.toasts).sort()).toEqual(
       Object.keys(TRANSLATIONS.en.toasts).sort(),
     );
+  });
+
+  it('prepares and animates Stag.glb with non-culled skinned meshes and valid finite bones', async () => {
+    const stagPath = path.join(ROOT_DIR, 'public/models/quaternius/Stag.glb');
+    const bytes = fs.readFileSync(stagPath);
+    const arrayBuffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(arrayBuffer).set(bytes);
+
+    const gltf = await new GLTFLoader().parseAsync(arrayBuffer, '');
+    const template = prepareReindeerTemplate(gltf.scene);
+    const instance = createReindeerInstance(template);
+
+    const idleClip = THREE.AnimationClip.findByName(gltf.animations, 'AnimalArmature|Idle');
+    expect(idleClip).toBeDefined();
+
+    const mixer = new THREE.AnimationMixer(instance);
+    if (idleClip) {
+      mixer.clipAction(idleClip).play();
+    }
+    mixer.update(0.16);
+    instance.updateMatrixWorld(true);
+
+    const skinnedMeshes: THREE.SkinnedMesh[] = [];
+    let hornsMesh: THREE.Mesh | null = null;
+    const allMeshes: THREE.Mesh[] = [];
+
+    instance.traverse((obj) => {
+      if (obj instanceof THREE.SkinnedMesh) {
+        skinnedMeshes.push(obj);
+      } else if (obj instanceof THREE.Mesh && obj.name === 'Stag_Horns') {
+        hornsMesh = obj;
+      }
+      if (obj instanceof THREE.Mesh) {
+        allMeshes.push(obj);
+      }
+    });
+
+    expect(skinnedMeshes.length).toBe(5);
+    expect(hornsMesh).not.toBeNull();
+
+    for (const mesh of allMeshes) {
+      expect(mesh.frustumCulled).toBe(false);
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of mats) {
+        expect(mat).toBeInstanceOf(THREE.MeshStandardMaterial);
+        if (mat instanceof THREE.MeshStandardMaterial) {
+          expect(mat.metalness).toBeLessThanOrEqual(0.1);
+          expect(mat.normalMap).toBeNull();
+        }
+      }
+    }
+
+    for (const skinned of skinnedMeshes) {
+      skinned.skeleton.update();
+      const boneMatrices = skinned.skeleton.boneMatrices;
+      expect(boneMatrices).not.toBeNull();
+      expect(boneMatrices?.length).toBeGreaterThan(0);
+      if (boneMatrices) {
+        const allFinite = Array.from(boneMatrices).every((val) => Number.isFinite(val));
+        expect(allFinite).toBe(true);
+      }
+    }
+
+    mixer.stopAllAction();
+    mixer.uncacheRoot(instance);
   });
 });
 

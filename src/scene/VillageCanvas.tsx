@@ -1,6 +1,6 @@
 import { PerformanceMonitor } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { Component, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { Component, type ReactNode, useLayoutEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { preloadGltf } from '../assets/asyncAssets';
 import { MODEL_PATHS } from '../assets/modelRegistry';
@@ -57,7 +57,7 @@ export function VillageCanvas() {
   const [dpr, setDpr] = useState<[number, number]>(initialMobile ? [1, 1.5] : [1, 2]);
   const [enablePostFx, setEnablePostFx] = useState(!initialMobile);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     void preloadGltf(MODEL_PATHS.stagRigged);
     void preloadGltf(MODEL_PATHS.trainLocomotive);
     void preloadGltf(POLYHAVEN_PATHS.streetLamp);

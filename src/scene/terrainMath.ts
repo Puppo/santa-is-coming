@@ -72,8 +72,8 @@ export const ZONE_CAMERA_PRESETS: Record<ZoneId, CameraPreset> = {
     target: [-8.4, 1.6, -3.6],
   },
   sleigh: {
-    position: [6.4, 4.1, 15.2],
-    target: [0.5, 1.05, 9.2],
+    position: [5.4, 4.2, 16.4],
+    target: [1.15, 1.05, 9.5],
   },
   cabin: {
     position: [1.8, 4.5, 3.4],

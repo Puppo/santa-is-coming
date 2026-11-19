@@ -115,18 +115,21 @@ function useProgressiveTriplet(
     }
 
     let cancelled = false;
-    void Promise.all([
-      loadCachedTexture(diffUrl),
-      loadCachedTexture(norUrl),
-      loadCachedTexture(armUrl),
-    ]).then(([d, n, a]) => {
-      if (!cancelled && d && n && a) {
-        setLoaded([d, n, a]);
-      }
-    });
+    const timer = window.setTimeout(() => {
+      void Promise.all([
+        loadCachedTexture(diffUrl),
+        loadCachedTexture(norUrl),
+        loadCachedTexture(armUrl),
+      ]).then(([d, n, a]) => {
+        if (!cancelled && d && n && a) {
+          setLoaded([d, n, a]);
+        }
+      });
+    }, 80);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [diffUrl, norUrl, armUrl]);
 
@@ -221,20 +224,23 @@ export function useFirFoliagePbr() {
     }
 
     let cancelled = false;
-    void Promise.all([
-      loadCachedTexture(POLYHAVEN_PATHS.firTwigDiff),
-      loadCachedTexture(POLYHAVEN_PATHS.firTwigAlpha),
-      loadCachedTexture(POLYHAVEN_PATHS.firTwigNor),
-      loadCachedTexture(POLYHAVEN_PATHS.firBarkDiff),
-      loadCachedTexture(POLYHAVEN_PATHS.firBarkNor),
-    ]).then(([td, ta, tn, bd, bn]) => {
-      if (!cancelled && td && ta && tn && bd && bn) {
-        setLoaded([td, ta, tn, bd, bn]);
-      }
-    });
+    const timer = window.setTimeout(() => {
+      void Promise.all([
+        loadCachedTexture(POLYHAVEN_PATHS.firTwigDiff),
+        loadCachedTexture(POLYHAVEN_PATHS.firTwigAlpha),
+        loadCachedTexture(POLYHAVEN_PATHS.firTwigNor),
+        loadCachedTexture(POLYHAVEN_PATHS.firBarkDiff),
+        loadCachedTexture(POLYHAVEN_PATHS.firBarkNor),
+      ]).then(([td, ta, tn, bd, bn]) => {
+        if (!cancelled && td && ta && tn && bd && bn) {
+          setLoaded([td, ta, tn, bd, bn]);
+        }
+      });
+    }, 80);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, []);
 

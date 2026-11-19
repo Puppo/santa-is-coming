@@ -2,7 +2,7 @@ import { ContactShadows } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { loadCachedHdri } from '../assets/asyncAssets';
+import { getResolvedHdri, loadCachedHdri } from '../assets/asyncAssets';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
 import { christmasAudioEngine } from '../audio/audioEngine';
 import type { AtmosphereMode } from '../i18n/translations';
@@ -122,16 +122,24 @@ export function Atmosphere() {
 
   useEffect(() => {
     scene.environmentIntensity = cfg.envIntensity;
-    let cancelled = false;
+    const cached = getResolvedHdri(activeHdri);
+    if (cached) {
+      scene.environment = cached;
+      return undefined;
+    }
 
-    void loadCachedHdri(activeHdri).then((envTex) => {
-      if (!cancelled && envTex) {
-        scene.environment = envTex;
-      }
-    });
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void loadCachedHdri(activeHdri).then((envTex) => {
+        if (!cancelled && envTex) {
+          scene.environment = envTex;
+        }
+      });
+    }, 80);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [scene, activeHdri, cfg.envIntensity]);
 

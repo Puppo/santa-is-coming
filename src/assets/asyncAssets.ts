@@ -7,6 +7,47 @@ const textureLoader = new THREE.TextureLoader();
 const gltfLoader = new GLTFLoader();
 const hdrLoader = new HDRLoader();
 
+const MAX_CONCURRENT_TEXTURES = 4;
+let activeTextureLoads = 0;
+const textureQueue: Array<() => void> = [];
+
+function acquireTextureSlot(): Promise<void> {
+  if (activeTextureLoads < MAX_CONCURRENT_TEXTURES) {
+    activeTextureLoads++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    textureQueue.push(() => {
+      activeTextureLoads++;
+      resolve();
+    });
+  });
+}
+
+function releaseTextureSlot(): void {
+  activeTextureLoads = Math.max(0, activeTextureLoads - 1);
+  const next = textureQueue.shift();
+  if (next) next();
+}
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 2, baseDelayMs = 500): Promise<T> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt >= retries) {
+        throw err;
+      }
+      const delay = baseDelayMs * (attempt + 1) + attempt * 200;
+      attempt++;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, delay);
+      });
+    }
+  }
+}
+
 const resolvedTextures = new Map<string, THREE.Texture>();
 const pendingTextures = new Map<string, Promise<THREE.Texture | null>>();
 
@@ -20,6 +61,10 @@ export function getResolvedTexture(url: string): THREE.Texture | null {
   return resolvedTextures.get(url) ?? null;
 }
 
+export function getResolvedHdri(url: string): THREE.DataTexture | null {
+  return resolvedHdri.get(url) ?? null;
+}
+
 export function loadCachedTexture(url: string): Promise<THREE.Texture | null> {
   const existing = resolvedTextures.get(url);
   if (existing) {
@@ -30,8 +75,12 @@ export function loadCachedTexture(url: string): Promise<THREE.Texture | null> {
     return inflight;
   }
 
-  const promise = textureLoader
-    .loadAsync(url)
+  const promise = acquireTextureSlot()
+    .then(() =>
+      withRetry(() => textureLoader.loadAsync(url), 2, 500).finally(() => {
+        releaseTextureSlot();
+      }),
+    )
     .then((tex) => {
       resolvedTextures.set(url, tex);
       pendingTextures.delete(url);
@@ -57,8 +106,7 @@ export function preloadGltf(url: string): Promise<GLTF | null> {
     return inflight;
   }
 
-  const promise = gltfLoader
-    .loadAsync(url)
+  const promise = withRetry(() => gltfLoader.loadAsync(url), 2, 500)
     .then((gltf) => {
       resolvedGltf.set(url, gltf);
       pendingGltf.delete(url);
@@ -109,8 +157,7 @@ export function loadCachedHdri(url: string): Promise<THREE.DataTexture | null> {
     return inflight;
   }
 
-  const promise = hdrLoader
-    .loadAsync(url)
+  const promise = withRetry(() => hdrLoader.loadAsync(url), 2, 500)
     .then((tex) => {
       tex.mapping = THREE.EquirectangularReflectionMapping;
       resolvedHdri.set(url, tex);
