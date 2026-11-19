@@ -190,8 +190,8 @@ export function SleighSanta() {
       [-1, 1].map((side) => {
         const curve = new THREE.CatmullRomCurve3([
           new THREE.Vector3(-0.28, 0.94, 0.62),
-          new THREE.Vector3(side * 0.22, 0.88, 1.12),
-          new THREE.Vector3(side * 0.45, 0.58, 2.05),
+          new THREE.Vector3(side * 0.26, 0.86, 1.06),
+          new THREE.Vector3(side * 0.45, 0.56, 1.18),
         ]);
         return new THREE.TubeGeometry(curve, 14, 0.014, 6, false);
       }),

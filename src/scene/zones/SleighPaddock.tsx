@@ -8,11 +8,13 @@ import { ReindeerHerd } from '../characters/ReindeerHerd';
 import { SleighSanta } from '../characters/RiggedSanta';
 import { VictorianStreetLamp, WarmWoodenLantern } from '../PolyHavenProp';
 import { RealisticGift } from '../RealisticGift';
+import { BASE_ROT_Y, createSleighFlightTrack, PADDOCK_X, PADDOCK_Z } from '../sleighFlightPath';
 import { getGroundHeight } from '../terrainMath';
 
-const PADDOCK_X = -1.2;
-const PADDOCK_Z = 9.2;
-const BASE_ROT_Y = Math.PI * 0.46;
+function trailSmoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
 
 function TimberPaddockFence({ position }: { position: [number, number, number] }) {
   const wood = useWoodPbr(1.5);
@@ -54,7 +56,6 @@ export function SleighPaddock() {
   const paddockY = getGroundHeight(PADDOCK_X, PADDOCK_Z);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const tmpPos = useMemo(() => new THREE.Vector3(), []);
-  const tmpNext = useMemo(() => new THREE.Vector3(), []);
 
   // Sculpted Victorian Sleigh Side Curve
   const { sidePanelGeo, runnerCurveGeo } = useMemo(() => {
@@ -90,71 +91,50 @@ export function SleighPaddock() {
     return { sidePanelGeo: pGeo, runnerCurveGeo: rGeo };
   }, []);
 
-  const flightCurve = useMemo(() => {
-    const start = new THREE.Vector3(PADDOCK_X, paddockY + 0.05, PADDOCK_Z);
-    return new THREE.CatmullRomCurve3(
-      [
-        start.clone(),
-        new THREE.Vector3(4.8, 2.3, 7.6),
-        new THREE.Vector3(5.5, 5.6, 0.4),
-        new THREE.Vector3(1.6, 7.4, -6.0),
-        new THREE.Vector3(-5.0, 6.4, -4.2),
-        new THREE.Vector3(-5.5, 4.4, 3.6),
-        new THREE.Vector3(-3.8, 1.9, 8.2),
-        start.clone(),
-      ],
-      true,
-    );
-  }, [paddockY]);
-
-  const restPos = useMemo(
-    () => new THREE.Vector3(PADDOCK_X, paddockY + 0.03, PADDOCK_Z),
-    [paddockY],
-  );
-  const baseQuat = useMemo(
-    () => new THREE.Quaternion().setFromEuler(new THREE.Euler(0, BASE_ROT_Y, 0)),
-    [],
-  );
+  const flightTrack = useMemo(() => createSleighFlightTrack(), []);
+  const tmpQuat = useMemo(() => new THREE.Quaternion(), []);
 
   useFrame((state, delta) => {
     const rig = rigRef.current;
     if (!rig) return;
 
+    let currentSampleHeight = 0;
     if (sleighFlightActive) {
       if (!motionPaused) {
-        flightProgressRef.current = Math.min(1, flightProgressRef.current + delta / 10.2);
+        flightProgressRef.current = Math.min(1, flightProgressRef.current + delta / 10.4);
       }
-      const u = flightProgressRef.current;
-      flightCurve.getPointAt(u, tmpPos);
-      flightCurve.getPointAt((u + 0.015) % 1, tmpNext);
-
-      rig.position.copy(tmpPos);
-      if (u >= 0.995) {
-        rig.quaternion.slerp(baseQuat, 0.25);
-      } else {
-        rig.lookAt(tmpNext);
-        rig.rotateZ(Math.sin(u * Math.PI * 4) * 0.14);
-      }
+      const sample = flightTrack.sampleCarriagePose(
+        flightProgressRef.current,
+        0,
+        rig.position,
+        rig.quaternion,
+      );
+      currentSampleHeight = sample.heightAboveGround;
     } else {
       flightProgressRef.current = 0;
-      rig.position.lerp(restPos, 0.12);
-      rig.quaternion.slerp(baseQuat, 0.12);
+      flightTrack.sampleCarriagePose(0, 0, rig.position, rig.quaternion);
     }
 
     if (trailRef.current) {
-      trailRef.current.visible = sleighFlightActive && !motionPaused;
-      if (sleighFlightActive) {
+      const trailFade = trailSmoothstep(0.05, 0.45, currentSampleHeight);
+      trailRef.current.visible = sleighFlightActive && !motionPaused && trailFade > 0.01;
+      if (trailRef.current.visible) {
         const t = state.clock.elapsedTime;
+        const maxTrailU = Math.min(
+          1,
+          (flightProgressRef.current * flightTrack.travelLength) / flightTrack.totalLength,
+        );
         for (let i = 0; i < 24; i++) {
           const lag = (t * 1.6 + i / 24) % 1;
-          const u = Math.max(0, (flightProgressRef.current - lag * 0.14 + 1) % 1);
-          flightCurve.getPointAt(u, tmpPos);
+          const uTrail = Math.max(0, maxTrailU - lag * 0.14);
+          flightTrack.curve.getPointAt(uTrail, tmpPos);
           dummy.position.set(
             tmpPos.x + Math.sin(i * 3.1 + t * 4) * 0.38,
             tmpPos.y + 0.35 + Math.cos(i * 2.4) * 0.25,
             tmpPos.z + Math.cos(i * 1.9 + t * 4) * 0.38,
           );
-          dummy.scale.setScalar((1 - lag) * 0.14);
+          dummy.scale.setScalar((1 - lag) * 0.14 * trailFade);
+          dummy.quaternion.copy(tmpQuat);
           dummy.updateMatrix();
           trailRef.current.setMatrixAt(i, dummy.matrix);
         }
@@ -173,10 +153,10 @@ export function SleighPaddock() {
         />
       ))}
       <VictorianStreetLamp
-        position={[-4.2, getGroundHeight(-4.2, 8.2), 8.2]}
+        position={[-4.6, getGroundHeight(-4.6, 7.2), 7.2]}
         lightIntensity={2.8}
       />
-      <VictorianStreetLamp position={[2.4, getGroundHeight(2.4, 8.0), 8.0]} lightIntensity={2.8} />
+      <VictorianStreetLamp position={[2.4, getGroundHeight(2.4, 7.6), 7.6]} lightIntensity={2.8} />
 
       {/* Shared warm paddock illumination for the sleigh & reindeer team */}
       <pointLight
@@ -189,13 +169,13 @@ export function SleighPaddock() {
 
       {/* Wrapped Satin Presents on the Snow Waiting to be Loaded */}
       <RealisticGift
-        position={[-3.3, getGroundHeight(-3.3, 9.1), 9.1]}
+        position={[-2.4, getGroundHeight(-2.4, 10.65), 10.65]}
         boxColor="#9e1c2b"
         ribbonColor="#f2c45a"
         scale={1.1}
       />
       <RealisticGift
-        position={[-3.85, getGroundHeight(-3.85, 9.8), 9.8]}
+        position={[-3.05, getGroundHeight(-3.05, 10.95), 10.95]}
         boxColor="#1d6e46"
         ribbonColor="#f2c45a"
         rotation={[0, 0.5, 0]}
@@ -307,9 +287,14 @@ export function SleighPaddock() {
           {/* Real Wooden Lantern Mounted on Sleigh Bow */}
           <WarmWoodenLantern position={[0.66, 0.88, 1.02]} lightIntensity={2.2} />
         </group>
-
-        <ReindeerHerd isFlying={sleighFlightActive} />
       </group>
+
+      <ReindeerHerd
+        sleighFlightActive={sleighFlightActive}
+        flightProgressRef={flightProgressRef}
+        flightTrack={flightTrack}
+        sleighRigRef={rigRef}
+      />
 
       {/* Golden Stardust Flight Trail */}
       <instancedMesh

@@ -13,6 +13,12 @@ import { MusicPlayerBar } from '../components/MusicPlayerBar';
 import { ZoneDock } from '../components/ZoneDock';
 import { TRANSLATIONS } from '../i18n/translations';
 import { createReindeerInstance, prepareReindeerTemplate } from '../scene/characters/ReindeerHerd';
+import {
+  BASE_ROT_Y,
+  createSleighFlightTrack,
+  PAIR_LEAD_DISTANCES,
+} from '../scene/sleighFlightPath';
+import { getGroundHeight } from '../scene/terrainMath';
 import { useVillage, VillageProvider } from '../state/villageStore';
 
 const ROOT_DIR = path.resolve(__dirname, '../..');
@@ -139,6 +145,42 @@ describe('Santa Village Assets & Translations', () => {
     mixer.stopAllAction();
     mixer.uncacheRoot(instance);
   });
+  it('keeps all 6 reindeer hooves above snow throughout takeoff, sky loop, and landing rollout', () => {
+    const track = createSleighFlightTrack();
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    const sideWorld = new THREE.Vector3();
+    const baseQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, BASE_ROT_Y, 0));
+
+    const startPos = new THREE.Vector3();
+    const endPos = new THREE.Vector3();
+    const startQuat = new THREE.Quaternion();
+    const endQuat = new THREE.Quaternion();
+
+    track.sampleCarriagePose(0, 0, startPos, startQuat);
+    track.sampleCarriagePose(1, 0, endPos, endQuat);
+
+    expect(startPos.distanceTo(endPos)).toBeLessThan(0.01);
+    expect(Math.abs(startQuat.dot(baseQuat))).toBeGreaterThan(0.9999);
+    expect(Math.abs(endQuat.dot(baseQuat))).toBeGreaterThan(0.9999);
+
+    for (let step = 0; step <= 200; step++) {
+      const u = step / 200;
+      track.sampleCarriagePose(u, 0, pos, quat);
+      expect(pos.y).toBeGreaterThanOrEqual(getGroundHeight(pos.x, pos.z));
+
+      for (const leadDist of PAIR_LEAD_DISTANCES) {
+        track.sampleCarriagePose(u, leadDist, pos, quat);
+        expect(pos.y).toBeGreaterThanOrEqual(getGroundHeight(pos.x, pos.z));
+
+        for (const sideX of [-0.62, 0.62]) {
+          sideWorld.set(sideX, 0, 0).applyQuaternion(quat).add(pos);
+          const clampedY = Math.max(sideWorld.y, getGroundHeight(sideWorld.x, sideWorld.z) + 0.02);
+          expect(clampedY).toBeGreaterThanOrEqual(getGroundHeight(sideWorld.x, sideWorld.z));
+        }
+      }
+    }
+  });
 });
 
 describe('Accessible HUD & Controls', () => {
@@ -248,7 +290,7 @@ describe('Accessible HUD & Controls', () => {
     }
   });
 
-  it('activates Sleigh Test Flight and resets its 11s flight timer when re-triggered mid-flight', () => {
+  it('activates Sleigh Test Flight without interrupting an active flight until landing', () => {
     vi.useFakeTimers();
     try {
       render(
@@ -267,23 +309,26 @@ describe('Accessible HUD & Controls', () => {
       fireEvent.click(launchBtn);
       expect(probe.textContent).toBe('true');
 
+      // Re-clicking at t=6s must ignore duplicate trigger and let the active 11s flight finish cleanly
       act(() => {
         vi.advanceTimersByTime(6000);
       });
-      expect(probe.textContent).toBe('true');
-
-      // Re-trigger at t=6s; flight must remain active beyond the original t=11s mark
       fireEvent.click(launchBtn);
+      expect(probe.textContent).toBe('true');
+
       act(() => {
-        vi.advanceTimersByTime(6000);
+        vi.advanceTimersByTime(4000);
       });
       expect(probe.textContent).toBe('true');
 
-      // Ends 11s after the second click (t=17s)
+      // Lands cleanly at t=11s and can be re-triggered once back in the paddock
       act(() => {
-        vi.advanceTimersByTime(5000);
+        vi.advanceTimersByTime(1000);
       });
       expect(probe.textContent).toBe('false');
+
+      fireEvent.click(launchBtn);
+      expect(probe.textContent).toBe('true');
     } finally {
       vi.useRealTimers();
     }

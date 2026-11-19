@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { useAsyncGltf } from '../../assets/asyncAssets';
@@ -7,6 +7,8 @@ import { enhanceHolidayGltf, smoothMeshNormalsInPlace } from '../../assets/enhan
 import { MODEL_PATHS } from '../../assets/modelRegistry';
 import { playSleighBells } from '../../audio/soundEffects';
 import { useVillage } from '../../state/villageStore';
+import { BASE_ROT_Y, PAIR_LEAD_DISTANCES, type SleighFlightTrack } from '../sleighFlightPath';
+import { getGroundHeight } from '../terrainMath';
 
 const REINDEER_MATERIAL_RULES: Array<{ match: string; roughness: number; metalness: number }> = [
   { match: '011', roughness: 0.08, metalness: 0.08 },
@@ -20,6 +22,15 @@ const FALLBACK_LEGS: Array<{ x: number; z: number; phase: number }> = [
   { x: -0.12, z: -0.28, phase: Math.PI },
   { x: 0.12, z: -0.28, phase: 0 },
 ];
+
+const SIDE_X_OFFSETS = [-0.62, 0.62] as const;
+const TRACE_SIDE_X = [-0.45, 0.45] as const;
+const UP_AXIS = new THREE.Vector3(0, 1, 0);
+
+interface ReindeerPairRuntimeState {
+  airborne: boolean;
+  trotting: boolean;
+}
 
 /**
  * Prepares a single normalized reindeer template from the source glTF scene so
@@ -74,7 +85,8 @@ export function createReindeerInstance(template: THREE.Object3D): THREE.Object3D
 interface RiggedReindeerModelProps {
   template: THREE.Object3D;
   animations: THREE.AnimationClip[];
-  isFlying: boolean;
+  pairIndex: number;
+  pairStatesRef: RefObject<ReindeerPairRuntimeState[]>;
   prancing: boolean;
   motionPaused: boolean;
   partyMode: boolean;
@@ -84,7 +96,8 @@ interface RiggedReindeerModelProps {
 function RiggedReindeerModel({
   template,
   animations,
-  isFlying,
+  pairIndex,
+  pairStatesRef,
   prancing,
   motionPaused,
   partyMode,
@@ -92,44 +105,68 @@ function RiggedReindeerModel({
 }: RiggedReindeerModelProps) {
   const clonedScene = useMemo(() => createReindeerInstance(template), [template]);
   const mixer = useMemo(() => new THREE.AnimationMixer(clonedScene), [clonedScene]);
-
-  useEffect(() => {
-    return () => {
-      mixer.stopAllAction();
-      mixer.uncacheRoot(clonedScene);
-    };
-  }, [mixer, clonedScene]);
+  const activeActionRef = useRef<THREE.AnimationAction | null>(null);
+  const activeClipNameRef = useRef<string | null>(null);
+  const lastDesiredClipRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (animations.length === 0) return undefined;
-    const clipName = isFlying
-      ? 'AnimalArmature|Gallop'
-      : prancing
-        ? 'AnimalArmature|Jump_toIdle'
-        : partyMode
-          ? 'AnimalArmature|Walk'
-          : delayPhase % 2 === 0
-            ? 'AnimalArmature|Idle'
-            : 'AnimalArmature|Idle_2';
-
-    const clip =
-      THREE.AnimationClip.findByName(animations, clipName) ??
+    const idleName = delayPhase % 2 === 0 ? 'AnimalArmature|Idle' : 'AnimalArmature|Idle_2';
+    const initialClip =
+      THREE.AnimationClip.findByName(animations, idleName) ??
       THREE.AnimationClip.findByName(animations, 'AnimalArmature|Idle') ??
       animations[0];
-    if (!clip) return undefined;
+    if (!initialClip) return undefined;
 
-    const action = mixer.clipAction(clip);
-    action.reset().fadeIn(0.25).play();
-    action.time = delayPhase * 0.4;
+    const action = mixer.clipAction(initialClip);
+    action.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+    action.time = (delayPhase * 0.4) % Math.max(0.1, initialClip.duration);
     mixer.update(0);
     clonedScene.updateMatrixWorld(true);
 
+    activeActionRef.current = action;
+    activeClipNameRef.current = initialClip.name;
+    lastDesiredClipRef.current = idleName;
+
     return () => {
-      action.fadeOut(0.2);
+      activeActionRef.current = null;
+      activeClipNameRef.current = null;
+      lastDesiredClipRef.current = null;
+      mixer.stopAllAction();
+      mixer.uncacheRoot(clonedScene);
     };
-  }, [mixer, clonedScene, animations, isFlying, prancing, partyMode, delayPhase]);
+  }, [mixer, clonedScene, animations, delayPhase]);
 
   useFrame((_, delta) => {
+    if (animations.length > 0) {
+      const pairState = pairStatesRef.current[pairIndex];
+      const desiredClip = pairState?.airborne
+        ? 'AnimalArmature|Gallop'
+        : prancing
+          ? 'AnimalArmature|Jump_toIdle'
+          : pairState?.trotting || partyMode
+            ? 'AnimalArmature|Walk'
+            : delayPhase % 2 === 0
+              ? 'AnimalArmature|Idle'
+              : 'AnimalArmature|Idle_2';
+
+      if (desiredClip !== lastDesiredClipRef.current) {
+        lastDesiredClipRef.current = desiredClip;
+        const nextClip =
+          THREE.AnimationClip.findByName(animations, desiredClip) ??
+          THREE.AnimationClip.findByName(animations, 'AnimalArmature|Idle') ??
+          animations[0];
+        if (nextClip && nextClip.name !== activeClipNameRef.current) {
+          const nextAction = mixer.clipAction(nextClip);
+          activeActionRef.current?.fadeOut(0.28);
+          nextAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.28).play();
+          nextAction.time = (delayPhase * 0.35) % Math.max(0.1, nextClip.duration);
+          activeActionRef.current = nextAction;
+          activeClipNameRef.current = nextClip.name;
+        }
+      }
+    }
+
     if (!motionPaused) {
       mixer.update(Math.min(delta, 0.1));
     }
@@ -139,7 +176,8 @@ function RiggedReindeerModel({
 }
 
 interface FallbackReindeerModelProps {
-  isFlying: boolean;
+  pairIndex: number;
+  pairStatesRef: RefObject<ReindeerPairRuntimeState[]>;
   prancing: boolean;
   motionPaused: boolean;
   partyMode: boolean;
@@ -147,7 +185,8 @@ interface FallbackReindeerModelProps {
 }
 
 function FallbackReindeerUnit({
-  isFlying,
+  pairIndex,
+  pairStatesRef,
   prancing,
   motionPaused,
   partyMode,
@@ -159,8 +198,11 @@ function FallbackReindeerUnit({
   useFrame((state) => {
     if (motionPaused) return;
     const t = state.clock.elapsedTime;
-    const speed = isFlying ? 12 : prancing ? 9 : partyMode ? 6.5 : 1.6;
-    const swing = isFlying ? 0.55 : prancing ? 0.42 : partyMode ? 0.28 : 0.04;
+    const pairState = pairStatesRef.current[pairIndex];
+    const airborne = Boolean(pairState?.airborne);
+    const trotting = Boolean(pairState?.trotting);
+    const speed = airborne ? 12 : prancing ? 9 : trotting || partyMode ? 6.5 : 1.6;
+    const swing = airborne ? 0.55 : prancing ? 0.42 : trotting || partyMode ? 0.28 : 0.04;
 
     FALLBACK_LEGS.forEach((leg, i) => {
       const grp = legRefs.current[i];
@@ -170,7 +212,7 @@ function FallbackReindeerUnit({
     });
 
     if (headRef.current) {
-      headRef.current.rotation.x = Math.sin(t * 2.1 + delayPhase) * (isFlying ? 0.1 : 0.05);
+      headRef.current.rotation.x = Math.sin(t * 2.1 + delayPhase) * (airborne ? 0.1 : 0.05);
     }
   });
 
@@ -275,9 +317,11 @@ function FallbackReindeerUnit({
 interface ReindeerUnitProps {
   preparedTemplate: THREE.Object3D | null;
   animations: THREE.AnimationClip[];
-  position: [number, number, number];
+  sideRef: (el: THREE.Group | null) => void;
+  sideX: number;
+  pairIndex: number;
+  pairStatesRef: RefObject<ReindeerPairRuntimeState[]>;
   isRudolph?: boolean;
-  isFlying: boolean;
   motionPaused: boolean;
   partyMode: boolean;
   delayPhase: number;
@@ -287,9 +331,11 @@ interface ReindeerUnitProps {
 function ReindeerUnit({
   preparedTemplate,
   animations,
-  position,
+  sideRef,
+  sideX,
+  pairIndex,
+  pairStatesRef,
   isRudolph = false,
-  isFlying,
   motionPaused,
   partyMode,
   delayPhase,
@@ -311,16 +357,18 @@ function ReindeerUnit({
         grp.position.y = 0;
         setPrancing(false);
       }
-    } else if (isFlying && !motionPaused) {
-      grp.position.y = Math.sin(state.clock.elapsedTime * 7 + delayPhase) * 0.14;
     } else {
-      grp.position.y = 0;
+      const airborne = Boolean(pairStatesRef.current[pairIndex]?.airborne);
+      const targetY =
+        airborne && !motionPaused ? Math.sin(state.clock.elapsedTime * 7 + delayPhase) * 0.12 : 0;
+      grp.position.y = THREE.MathUtils.lerp(grp.position.y, targetY, 0.18);
     }
   });
 
   return (
     <group
-      position={position}
+      ref={sideRef}
+      position={[sideX, 0, 0]}
       onClick={(e) => {
         e.stopPropagation();
         setPrancing(true);
@@ -339,7 +387,8 @@ function ReindeerUnit({
           <RiggedReindeerModel
             template={preparedTemplate}
             animations={animations}
-            isFlying={isFlying}
+            pairIndex={pairIndex}
+            pairStatesRef={pairStatesRef}
             prancing={prancing}
             motionPaused={motionPaused}
             partyMode={partyMode}
@@ -347,7 +396,8 @@ function ReindeerUnit({
           />
         ) : (
           <FallbackReindeerUnit
-            isFlying={isFlying}
+            pairIndex={pairIndex}
+            pairStatesRef={pairStatesRef}
             prancing={prancing}
             motionPaused={motionPaused}
             partyMode={partyMode}
@@ -383,23 +433,124 @@ function ReindeerUnit({
   );
 }
 
-const TEAM_OFFSETS: Array<{ pos: [number, number, number]; isRudolph?: boolean }> = [
-  { pos: [-0.62, 0, 2.05] },
-  { pos: [0.62, 0, 2.05] },
-  { pos: [-0.62, 0, 3.65] },
-  { pos: [0.62, 0, 3.65] },
-  { pos: [-0.62, 0, 5.25] },
-  { pos: [0.62, 0, 5.25], isRudolph: true },
-];
+export interface ReindeerHerdProps {
+  sleighFlightActive: boolean;
+  flightProgressRef: RefObject<number>;
+  flightTrack: SleighFlightTrack;
+  sleighRigRef: RefObject<THREE.Group | null>;
+}
 
-export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
+export function ReindeerHerd({
+  sleighFlightActive,
+  flightProgressRef,
+  flightTrack,
+  sleighRigRef,
+}: ReindeerHerdProps) {
   const gltf = useAsyncGltf(MODEL_PATHS.stagRigged);
   const { motionPaused, partyMode, announceKey } = useVillage();
+
+  const pairGroupRefs = useRef<Array<THREE.Group | null>>([]);
+  const reindeerSideRefs = useRef<Array<THREE.Group | null>>([]);
+  const traceRefs = useRef<Array<THREE.Mesh | null>>([]);
+  const pairStatesRef = useRef<ReindeerPairRuntimeState[]>(
+    PAIR_LEAD_DISTANCES.map(() => ({ airborne: false, trotting: false })),
+  );
+
+  const tmpSleighPos = useMemo(() => new THREE.Vector3(), []);
+  const tmpSleighQuat = useMemo(() => new THREE.Quaternion(), []);
+  const tmpSideWorld = useMemo(() => new THREE.Vector3(), []);
+  const tmpDir = useMemo(() => new THREE.Vector3(), []);
+  const anchorPoints = useMemo(
+    () =>
+      TRACE_SIDE_X.map(() => [
+        new THREE.Vector3(),
+        new THREE.Vector3(),
+        new THREE.Vector3(),
+        new THREE.Vector3(),
+      ]),
+    [],
+  );
+
+  const initialPairPositions = useMemo(() => {
+    const quat = new THREE.Quaternion();
+    return PAIR_LEAD_DISTANCES.map((leadDist) => {
+      const pos = new THREE.Vector3();
+      flightTrack.sampleCarriagePose(0, leadDist, pos, quat);
+      return [pos.x, pos.y, pos.z] as [number, number, number];
+    });
+  }, [flightTrack]);
 
   const preparedTemplate = useMemo(
     () => (gltf ? prepareReindeerTemplate(gltf.scene) : null),
     [gltf],
   );
+
+  useFrame(() => {
+    const progress = sleighFlightActive ? flightProgressRef.current : 0;
+
+    sleighRigRef.current?.updateMatrixWorld();
+    flightTrack.sampleCarriagePose(progress, 0, tmpSleighPos, tmpSleighQuat);
+
+    TRACE_SIDE_X.forEach((traceX, traceSideIdx) => {
+      anchorPoints[traceSideIdx][0]
+        .set(traceX, 0.56, 1.18)
+        .applyQuaternion(tmpSleighQuat)
+        .add(tmpSleighPos);
+    });
+
+    PAIR_LEAD_DISTANCES.forEach((leadDist, pairIdx) => {
+      const pairGroup = pairGroupRefs.current[pairIdx];
+      if (!pairGroup) return;
+
+      const sample = flightTrack.sampleCarriagePose(
+        progress,
+        leadDist,
+        pairGroup.position,
+        pairGroup.quaternion,
+      );
+      pairGroup.updateMatrixWorld(true);
+
+      const pairState = pairStatesRef.current[pairIdx];
+      pairState.airborne = sleighFlightActive && sample.heightAboveGround > 0.18;
+      pairState.trotting =
+        sleighFlightActive && sample.heightAboveGround <= 0.18 && sample.speedFactor > 0.08;
+
+      let pairLift = 0;
+      SIDE_X_OFFSETS.forEach((sideX, sideIdx) => {
+        const sideGroup = reindeerSideRefs.current[pairIdx * 2 + sideIdx];
+        if (!sideGroup) return;
+        tmpSideWorld.set(sideX, 0, 0).applyQuaternion(pairGroup.quaternion).add(pairGroup.position);
+        const minGround = getGroundHeight(tmpSideWorld.x, tmpSideWorld.z) + 0.02;
+        const clampY = Math.max(0, minGround - tmpSideWorld.y);
+        sideGroup.position.y = clampY;
+        pairLift = Math.max(pairLift, clampY);
+      });
+
+      TRACE_SIDE_X.forEach((traceX, traceSideIdx) => {
+        anchorPoints[traceSideIdx][pairIdx + 1]
+          .set(traceX, 0.56 + pairLift, 0.15)
+          .applyQuaternion(pairGroup.quaternion)
+          .add(pairGroup.position);
+      });
+    });
+
+    TRACE_SIDE_X.forEach((_, traceSideIdx) => {
+      for (let segIdx = 0; segIdx < 3; segIdx++) {
+        const mesh = traceRefs.current[traceSideIdx * 3 + segIdx];
+        if (!mesh) continue;
+        const pA = anchorPoints[traceSideIdx][segIdx];
+        const pB = anchorPoints[traceSideIdx][segIdx + 1];
+        mesh.position.lerpVectors(pA, pB, 0.5);
+        tmpDir.subVectors(pB, pA);
+        const len = tmpDir.length();
+        if (len > 1e-4) {
+          tmpDir.divideScalar(len);
+          mesh.quaternion.setFromUnitVectors(UP_AXIS, tmpDir);
+          mesh.scale.set(1, len, 1);
+        }
+      }
+    });
+  });
 
   const handlePrance = () => {
     playSleighBells();
@@ -408,26 +559,53 @@ export function ReindeerHerd({ isFlying }: { isFlying: boolean }) {
 
   return (
     <group name="reindeer-herd">
-      {[-0.45, 0.45].map((x) => (
-        <mesh key={`trace-${x}`} position={[x, 0.56, 3.1]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.018, 0.018, 4.4, 6]} />
-          <meshStandardMaterial color="#583018" roughness={0.72} />
-        </mesh>
-      ))}
+      {/* Segmented flexible leather traces linking sleigh bow through each reindeer pair */}
+      {TRACE_SIDE_X.map((traceX, traceSideIdx) =>
+        [0, 1, 2].map((segIdx) => (
+          <mesh
+            key={`trace-${traceX}-${segIdx}`}
+            ref={(el) => {
+              traceRefs.current[traceSideIdx * 3 + segIdx] = el;
+            }}
+          >
+            <cylinderGeometry args={[0.017, 0.017, 1, 6]} />
+            <meshStandardMaterial color="#583018" roughness={0.72} />
+          </mesh>
+        )),
+      )}
+
       <group name="reindeer-herd-models">
-        {TEAM_OFFSETS.map((unit, idx) => (
-          <ReindeerUnit
-            key={`reindeer-${unit.pos[0]}-${unit.pos[2]}`}
-            preparedTemplate={preparedTemplate}
-            animations={gltf?.animations ?? []}
-            position={unit.pos}
-            isRudolph={unit.isRudolph}
-            isFlying={isFlying}
-            motionPaused={motionPaused}
-            partyMode={partyMode}
-            delayPhase={idx * 0.7}
-            onPrance={handlePrance}
-          />
+        {PAIR_LEAD_DISTANCES.map((leadDist, pairIdx) => (
+          <group
+            key={`pair-${leadDist}`}
+            ref={(el) => {
+              pairGroupRefs.current[pairIdx] = el;
+            }}
+            position={initialPairPositions[pairIdx]}
+            rotation={[0, BASE_ROT_Y, 0]}
+          >
+            {SIDE_X_OFFSETS.map((sideX, sideIdx) => {
+              const unitIndex = pairIdx * 2 + sideIdx;
+              return (
+                <ReindeerUnit
+                  key={`reindeer-${leadDist}-${sideX}`}
+                  preparedTemplate={preparedTemplate}
+                  animations={gltf?.animations ?? []}
+                  sideRef={(el) => {
+                    reindeerSideRefs.current[unitIndex] = el;
+                  }}
+                  sideX={sideX}
+                  pairIndex={pairIdx}
+                  pairStatesRef={pairStatesRef}
+                  isRudolph={pairIdx === 2 && sideIdx === 1}
+                  motionPaused={motionPaused}
+                  partyMode={partyMode}
+                  delayPhase={unitIndex * 0.7}
+                  onPrance={handlePrance}
+                />
+              );
+            })}
+          </group>
         ))}
       </group>
     </group>
