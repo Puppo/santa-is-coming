@@ -13,9 +13,14 @@ import { MusicPlayerBar } from '../components/MusicPlayerBar';
 import { ZoneDock } from '../components/ZoneDock';
 import { TRANSLATIONS } from '../i18n/translations';
 import { createReindeerInstance, prepareReindeerTemplate } from '../scene/characters/ReindeerHerd';
-import { VillageProvider } from '../state/villageStore';
+import { useVillage, VillageProvider } from '../state/villageStore';
 
 const ROOT_DIR = path.resolve(__dirname, '../..');
+
+function FlightStateProbe() {
+  const { sleighFlightActive } = useVillage();
+  return <output data-testid="sleigh-flight-state">{String(sleighFlightActive)}</output>;
+}
 
 function resolvePublicAsset(assetUrl: string): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -238,6 +243,47 @@ describe('Accessible HUD & Controls', () => {
       });
       expect(updatedGrumpBtn.textContent).toContain('👀');
       expect(updatedGrumpBtn.textContent).toContain('1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('activates Sleigh Test Flight and resets its 11s flight timer when re-triggered mid-flight', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <VillageProvider>
+          <ZoneDock t={TRANSLATIONS.it} />
+          <FlightStateProbe />
+        </VillageProvider>,
+      );
+
+      const probe = screen.getByTestId('sleigh-flight-state');
+      const launchBtn = screen.getByRole('button', {
+        name: TRANSLATIONS.it.zones.overview.actionLabel,
+      });
+
+      expect(probe.textContent).toBe('false');
+      fireEvent.click(launchBtn);
+      expect(probe.textContent).toBe('true');
+
+      act(() => {
+        vi.advanceTimersByTime(6000);
+      });
+      expect(probe.textContent).toBe('true');
+
+      // Re-trigger at t=6s; flight must remain active beyond the original t=11s mark
+      fireEvent.click(launchBtn);
+      act(() => {
+        vi.advanceTimersByTime(6000);
+      });
+      expect(probe.textContent).toBe('true');
+
+      // Ends 11s after the second click (t=17s)
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(probe.textContent).toBe('false');
     } finally {
       vi.useRealTimers();
     }

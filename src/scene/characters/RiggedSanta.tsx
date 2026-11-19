@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { type RefObject, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { getFabricNormalMap } from '../../assets/proceduralTextures';
 import { christmasAudioEngine } from '../../audio/audioEngine';
@@ -7,8 +7,26 @@ import { playSleighBells } from '../../audio/soundEffects';
 import { useVillage } from '../../state/villageStore';
 import { getGroundHeight } from '../terrainMath';
 
-export function RiggedSanta() {
-  const { motionPaused, partyMode, sleighFlightActive, announceKey } = useVillage();
+interface SantaFigureProps {
+  showContactShadow?: boolean;
+  leftArmRef?: RefObject<THREE.Group | null>;
+  rightArmRef?: RefObject<THREE.Group | null>;
+  leftLegRef?: RefObject<THREE.Group | null>;
+  rightLegRef?: RefObject<THREE.Group | null>;
+  headRef?: RefObject<THREE.Group | null>;
+}
+
+/**
+ * Shared articulated Santa geometry used both on the village plaza patrol and seated in the sleigh.
+ */
+function SantaFigure({
+  showContactShadow = true,
+  leftArmRef,
+  rightArmRef,
+  leftLegRef,
+  rightLegRef,
+  headRef,
+}: SantaFigureProps) {
   const fabricNormal = useMemo(() => getFabricNormalMap(), []);
   const coatGeo = useMemo(() => {
     const pts = [
@@ -21,106 +39,14 @@ export function RiggedSanta() {
     return new THREE.LatheGeometry(pts, 22);
   }, []);
 
-  const rootRef = useRef<THREE.Group>(null);
-  const leftArmRef = useRef<THREE.Group>(null);
-  const rightArmRef = useRef<THREE.Group>(null);
-  const leftLegRef = useRef<THREE.Group>(null);
-  const rightLegRef = useRef<THREE.Group>(null);
-  const progressRef = useRef(0.1);
-  const waveBurstRef = useRef(0);
-
-  const patrolCurve = useMemo(
-    () =>
-      new THREE.CatmullRomCurve3(
-        [
-          new THREE.Vector3(5.6, 0, -2.0),
-          new THREE.Vector3(2.8, 0, -1.0),
-          new THREE.Vector3(2.2, 0, 2.2),
-          new THREE.Vector3(0.4, 0, 6.4),
-          new THREE.Vector3(2.4, 0, 3.6),
-          new THREE.Vector3(4.2, 0, -0.6),
-        ],
-        true,
-      ),
-    [],
-  );
-
-  const tmpPos = useMemo(() => new THREE.Vector3(), []);
-  const tmpNext = useMemo(() => new THREE.Vector3(), []);
-
-  useFrame((state, delta) => {
-    const root = rootRef.current;
-    if (!root) return;
-
-    if (waveBurstRef.current > 0) {
-      waveBurstRef.current = Math.max(0, waveBurstRef.current - delta * 0.7);
-    }
-
-    // Hide ground Santa while he flies in the Sleigh Test Flight
-    root.visible = !sleighFlightActive;
-    if (sleighFlightActive) return;
-
-    if (!motionPaused) {
-      progressRef.current = (progressRef.current + delta * 0.026) % 1;
-    }
-
-    const u = progressRef.current;
-    patrolCurve.getPointAt(u, tmpPos);
-    patrolCurve.getPointAt((u + 0.012) % 1, tmpNext);
-
-    const t = state.clock.elapsedTime;
-    const stride = motionPaused ? 0 : Math.sin(t * 5.2);
-    const groundY = getGroundHeight(tmpPos.x, tmpPos.z);
-    const nextY = getGroundHeight(tmpNext.x, tmpNext.z);
-
-    const bounce =
-      partyMode && !motionPaused ? Math.abs(Math.sin(t * 4.5)) * 0.14 : Math.abs(stride) * 0.04;
-    root.position.set(tmpPos.x, groundY + bounce, tmpPos.z);
-    root.lookAt(tmpNext.x, nextY, tmpNext.z);
-
-    if (leftLegRef.current && rightLegRef.current) {
-      leftLegRef.current.rotation.x = stride * 0.42;
-      rightLegRef.current.rotation.x = -stride * 0.42;
-    }
-    if (leftArmRef.current && rightArmRef.current) {
-      const bands = christmasAudioEngine.bands;
-      if (waveBurstRef.current > 0) {
-        rightArmRef.current.rotation.z = -2.2 + Math.sin(t * 14) * 0.35;
-        leftArmRef.current.rotation.x = -stride * 0.3;
-      } else if (partyMode && !motionPaused) {
-        rightArmRef.current.rotation.z = -1.1 - bands.mid * 0.6;
-        leftArmRef.current.rotation.z = 1.1 + bands.mid * 0.6;
-      } else {
-        rightArmRef.current.rotation.z = -0.15;
-        leftArmRef.current.rotation.z = 0.15;
-        rightArmRef.current.rotation.x = stride * 0.38;
-        leftArmRef.current.rotation.x = -stride * 0.38;
-      }
-    }
-  });
-
   return (
-    <group
-      ref={rootRef}
-      name="rigged-santa"
-      onClick={(e) => {
-        e.stopPropagation();
-        waveBurstRef.current = 1;
-        playSleighBells();
-        announceKey('toasts.santaWave');
-      }}
-      onPointerOver={() => {
-        document.body.style.cursor = 'pointer';
-      }}
-      onPointerOut={() => {
-        document.body.style.cursor = 'auto';
-      }}
-    >
-      {/* Contact Shadow */}
-      <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.38, 18]} />
-        <meshBasicMaterial color="#0b172c" transparent opacity={0.3} depthWrite={false} />
-      </mesh>
+    <>
+      {showContactShadow && (
+        <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.38, 18]} />
+          <meshBasicMaterial color="#0b172c" transparent opacity={0.3} depthWrite={false} />
+        </mesh>
+      )}
 
       {/* Sturdy Winter Boots */}
       {[-0.13, 0.13].map((lx, i) => (
@@ -187,7 +113,7 @@ export function RiggedSanta() {
       </group>
 
       {/* Head, Beard, Mustache, Glasses & Santa Hat */}
-      <group position={[0, 1.09, 0]}>
+      <group ref={headRef} position={[0, 1.09, 0]}>
         <mesh castShadow>
           <sphereGeometry args={[0.19, 16, 16]} />
           <meshStandardMaterial color="#f4c5a4" roughness={0.72} />
@@ -244,6 +170,181 @@ export function RiggedSanta() {
           <meshStandardMaterial color="#f7f9fe" roughness={0.95} />
         </mesh>
       </group>
+    </>
+  );
+}
+
+/**
+ * Seated Santa holding leather reins and waving from the flying sleigh during test flights.
+ */
+export function SleighSanta() {
+  const { sleighFlightActive, motionPaused } = useVillage();
+  const leftArmRef = useRef<THREE.Group>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
+  const leftLegRef = useRef<THREE.Group>(null);
+  const rightLegRef = useRef<THREE.Group>(null);
+  const headRef = useRef<THREE.Group>(null);
+
+  const reinGeometries = useMemo(
+    () =>
+      [-1, 1].map((side) => {
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(-0.28, 0.94, 0.62),
+          new THREE.Vector3(side * 0.22, 0.88, 1.12),
+          new THREE.Vector3(side * 0.45, 0.58, 2.05),
+        ]);
+        return new THREE.TubeGeometry(curve, 14, 0.014, 6, false);
+      }),
+    [],
+  );
+
+  useFrame((state) => {
+    if (!sleighFlightActive) return;
+    const t = state.clock.elapsedTime;
+    if (leftLegRef.current && rightLegRef.current) {
+      leftLegRef.current.rotation.x = -1.08;
+      rightLegRef.current.rotation.x = -1.08;
+    }
+    if (leftArmRef.current) {
+      leftArmRef.current.rotation.x = -0.98 + (motionPaused ? 0 : Math.sin(t * 7) * 0.08);
+      leftArmRef.current.rotation.z = 0.16;
+    }
+    if (rightArmRef.current) {
+      rightArmRef.current.rotation.z = -2.28 + (motionPaused ? 0 : Math.sin(t * 9.5) * 0.34);
+      rightArmRef.current.rotation.x = -0.32;
+    }
+    if (headRef.current) {
+      headRef.current.rotation.y = motionPaused ? 0 : Math.sin(t * 2.4) * 0.24;
+      headRef.current.rotation.x = -0.06;
+    }
+  });
+
+  return (
+    <group name="sleigh-santa" visible={sleighFlightActive}>
+      <group position={[0, 0.29, 0.36]} scale={1.06}>
+        <SantaFigure
+          showContactShadow={false}
+          leftArmRef={leftArmRef}
+          rightArmRef={rightArmRef}
+          leftLegRef={leftLegRef}
+          rightLegRef={rightLegRef}
+          headRef={headRef}
+        />
+      </group>
+      {reinGeometries.map((geo, idx) => (
+        <mesh key={`rein-${idx === 0 ? 'left' : 'right'}`} geometry={geo}>
+          <meshStandardMaterial color="#4a2612" roughness={0.7} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+export function RiggedSanta() {
+  const { motionPaused, partyMode, sleighFlightActive, announceKey } = useVillage();
+
+  const rootRef = useRef<THREE.Group>(null);
+  const leftArmRef = useRef<THREE.Group>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
+  const leftLegRef = useRef<THREE.Group>(null);
+  const rightLegRef = useRef<THREE.Group>(null);
+  const progressRef = useRef(0.1);
+  const waveBurstRef = useRef(0);
+
+  const patrolCurve = useMemo(
+    () =>
+      new THREE.CatmullRomCurve3(
+        [
+          new THREE.Vector3(5.6, 0, -2.0),
+          new THREE.Vector3(2.8, 0, -1.0),
+          new THREE.Vector3(2.2, 0, 2.2),
+          new THREE.Vector3(0.4, 0, 6.4),
+          new THREE.Vector3(2.4, 0, 3.6),
+          new THREE.Vector3(4.2, 0, -0.6),
+        ],
+        true,
+      ),
+    [],
+  );
+
+  const tmpPos = useMemo(() => new THREE.Vector3(), []);
+  const tmpNext = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame((state, delta) => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    if (waveBurstRef.current > 0) {
+      waveBurstRef.current = Math.max(0, waveBurstRef.current - delta * 0.7);
+    }
+
+    // Hide ground Santa while he rides in the Sleigh Test Flight
+    root.visible = !sleighFlightActive;
+    if (sleighFlightActive) return;
+
+    if (!motionPaused) {
+      progressRef.current = (progressRef.current + delta * 0.026) % 1;
+    }
+
+    const u = progressRef.current;
+    patrolCurve.getPointAt(u, tmpPos);
+    patrolCurve.getPointAt((u + 0.012) % 1, tmpNext);
+
+    const t = state.clock.elapsedTime;
+    const stride = motionPaused ? 0 : Math.sin(t * 5.2);
+    const groundY = getGroundHeight(tmpPos.x, tmpPos.z);
+    const nextY = getGroundHeight(tmpNext.x, tmpNext.z);
+
+    const bounce =
+      partyMode && !motionPaused ? Math.abs(Math.sin(t * 4.5)) * 0.14 : Math.abs(stride) * 0.04;
+    root.position.set(tmpPos.x, groundY + bounce, tmpPos.z);
+    root.lookAt(tmpNext.x, nextY, tmpNext.z);
+
+    if (leftLegRef.current && rightLegRef.current) {
+      leftLegRef.current.rotation.x = stride * 0.42;
+      rightLegRef.current.rotation.x = -stride * 0.42;
+    }
+    if (leftArmRef.current && rightArmRef.current) {
+      const bands = christmasAudioEngine.bands;
+      if (waveBurstRef.current > 0) {
+        rightArmRef.current.rotation.z = -2.2 + Math.sin(t * 14) * 0.35;
+        leftArmRef.current.rotation.x = -stride * 0.3;
+      } else if (partyMode && !motionPaused) {
+        rightArmRef.current.rotation.z = -1.1 - bands.mid * 0.6;
+        leftArmRef.current.rotation.z = 1.1 + bands.mid * 0.6;
+      } else {
+        rightArmRef.current.rotation.z = -0.15;
+        leftArmRef.current.rotation.z = 0.15;
+        rightArmRef.current.rotation.x = stride * 0.38;
+        leftArmRef.current.rotation.x = -stride * 0.38;
+      }
+    }
+  });
+
+  return (
+    <group
+      ref={rootRef}
+      name="rigged-santa"
+      onClick={(e) => {
+        e.stopPropagation();
+        waveBurstRef.current = 1;
+        playSleighBells();
+        announceKey('toasts.santaWave');
+      }}
+      onPointerOver={() => {
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = 'auto';
+      }}
+    >
+      <SantaFigure
+        showContactShadow
+        leftArmRef={leftArmRef}
+        rightArmRef={rightArmRef}
+        leftLegRef={leftLegRef}
+        rightLegRef={rightLegRef}
+      />
     </group>
   );
 }

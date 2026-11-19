@@ -5,6 +5,7 @@ import { useWoodPbr } from '../../assets/pbrMaterials';
 import { getFabricNormalMap } from '../../assets/proceduralTextures';
 import { useVillage } from '../../state/villageStore';
 import { ReindeerHerd } from '../characters/ReindeerHerd';
+import { SleighSanta } from '../characters/RiggedSanta';
 import { VictorianStreetLamp, WarmWoodenLantern } from '../PolyHavenProp';
 import { RealisticGift } from '../RealisticGift';
 import { getGroundHeight } from '../terrainMath';
@@ -94,17 +95,26 @@ export function SleighPaddock() {
     return new THREE.CatmullRomCurve3(
       [
         start.clone(),
-        new THREE.Vector3(6.8, 2.2, 8.8),
-        new THREE.Vector3(10.5, 6.2, 0.5),
-        new THREE.Vector3(3.2, 8.4, -7.8),
-        new THREE.Vector3(-8.5, 7.2, -5.0),
-        new THREE.Vector3(-10.8, 5.2, 4.6),
-        new THREE.Vector3(-6.2, 2.1, 8.8),
+        new THREE.Vector3(4.8, 2.3, 7.6),
+        new THREE.Vector3(5.5, 5.6, 0.4),
+        new THREE.Vector3(1.6, 7.4, -6.0),
+        new THREE.Vector3(-5.0, 6.4, -4.2),
+        new THREE.Vector3(-5.5, 4.4, 3.6),
+        new THREE.Vector3(-3.8, 1.9, 8.2),
         start.clone(),
       ],
       true,
     );
   }, [paddockY]);
+
+  const restPos = useMemo(
+    () => new THREE.Vector3(PADDOCK_X, paddockY + 0.03, PADDOCK_Z),
+    [paddockY],
+  );
+  const baseQuat = useMemo(
+    () => new THREE.Quaternion().setFromEuler(new THREE.Euler(0, BASE_ROT_Y, 0)),
+    [],
+  );
 
   useFrame((state, delta) => {
     const rig = rigRef.current;
@@ -119,13 +129,16 @@ export function SleighPaddock() {
       flightCurve.getPointAt((u + 0.015) % 1, tmpNext);
 
       rig.position.copy(tmpPos);
-      rig.lookAt(tmpNext);
-      rig.rotateZ(Math.sin(u * Math.PI * 4) * 0.14);
+      if (u >= 0.995) {
+        rig.quaternion.slerp(baseQuat, 0.25);
+      } else {
+        rig.lookAt(tmpNext);
+        rig.rotateZ(Math.sin(u * Math.PI * 4) * 0.14);
+      }
     } else {
       flightProgressRef.current = 0;
-      rig.position.lerp(new THREE.Vector3(PADDOCK_X, paddockY + 0.03, PADDOCK_Z), 0.12);
-      const targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, BASE_ROT_Y, 0));
-      rig.quaternion.slerp(targetQuat, 0.12);
+      rig.position.lerp(restPos, 0.12);
+      rig.quaternion.slerp(baseQuat, 0.12);
     }
 
     if (trailRef.current) {
@@ -261,6 +274,9 @@ export function SleighPaddock() {
             <boxGeometry args={[1.18, 0.22, 0.68]} />
             <meshStandardMaterial color="#4f111a" normalMap={fabricNormal} roughness={0.86} />
           </mesh>
+
+          {/* Santa seated at the reins during Sleigh Test Flights */}
+          <SleighSanta />
 
           {/* Overflowing Burlap & Velvet Toy Sack + Satin Gifts */}
           <mesh position={[0, 0.84, -0.52]} scale={[1.18, 0.96, 0.88]} castShadow>

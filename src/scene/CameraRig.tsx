@@ -7,7 +7,7 @@ import { ZONE_CAMERA_PRESETS } from './terrainMath';
 
 export function CameraRig() {
   const controlsRef = useRef<ComponentRef<typeof CameraControls>>(null);
-  const { activeZone, motionPaused } = useVillage();
+  const { activeZone, motionPaused, sleighFlightActive } = useVillage();
   const size = useThree((s) => s.size);
   const camera = useThree((s) => s.camera);
   const isFirstMount = useRef(true);
@@ -31,6 +31,15 @@ export function CameraRig() {
     const animate = !isFirstMount.current && !motionPaused;
     isFirstMount.current = false;
 
+    if (sleighFlightActive) {
+      if (isPortrait) {
+        void controls.setLookAt(0.5, 12.6, 30.2, 0.1, 2.6, 1.0, animate);
+      } else {
+        void controls.setLookAt(0.3, 10.6, 24.8, 0, 2.6, 0.4, animate);
+      }
+      return;
+    }
+
     if (isPortrait && activeZone === 'overview') {
       void controls.setLookAt(0.65, 12.0, 28.6, 0.35, 1.35, 1.2, animate);
       return;
@@ -52,7 +61,7 @@ export function CameraRig() {
       preset.target[2],
       animate,
     );
-  }, [activeZone, motionPaused, isPortrait, camera, size.width, size.height]);
+  }, [activeZone, motionPaused, sleighFlightActive, isPortrait, camera, size.width, size.height]);
 
   return (
     <CameraControls

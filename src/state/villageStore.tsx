@@ -98,6 +98,7 @@ export function VillageProvider({ children }: { children: ReactNode }) {
 
   const toastCounter = useRef(0);
   const timersRef = useRef<number[]>([]);
+  const sleighTimerRef = useRef<number | null>(null);
   const currentTrack = CHRISTMAS_TRACKS[trackIndex];
 
   const scheduleTimer = useCallback((fn: () => void, ms: number) => {
@@ -184,10 +185,16 @@ export function VillageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const triggerSleighFlight = useCallback(() => {
+    if (sleighTimerRef.current !== null) {
+      window.clearTimeout(sleighTimerRef.current);
+    }
     playSleighBells();
     setSleighFlightActive(true);
     announceKey('toasts.sleighFlight');
-    scheduleTimer(() => setSleighFlightActive(false), 11000);
+    sleighTimerRef.current = scheduleTimer(() => {
+      sleighTimerRef.current = null;
+      setSleighFlightActive(false);
+    }, 11000);
   }, [announceKey, scheduleTimer]);
 
   const triggerWorkshopBoost = useCallback(() => {
