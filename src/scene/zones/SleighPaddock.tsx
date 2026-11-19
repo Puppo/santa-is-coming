@@ -133,7 +133,7 @@ export function SleighPaddock() {
             tmpPos.y + 0.35 + Math.cos(i * 2.4) * 0.25,
             tmpPos.z + Math.cos(i * 1.9 + t * 4) * 0.38,
           );
-          dummy.scale.setScalar((1 - lag) * 0.14 * trailFade);
+          dummy.scale.setScalar(Math.max(0.0001, (1 - lag) * 0.14 * trailFade));
           dummy.quaternion.copy(tmpQuat);
           dummy.updateMatrix();
           trailRef.current.setMatrixAt(i, dummy.matrix);

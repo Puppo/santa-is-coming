@@ -31,7 +31,7 @@ export function SantaCabin() {
       const r = 0.35 + life * 1.1;
       dummy.position.set(-2.25 + Math.cos(a) * r, 0.95 + life * 2.8, 2.55 + Math.sin(a) * r);
       dummy.rotation.set(life * 4, a, life * 2);
-      dummy.scale.setScalar(Math.sin(life * Math.PI) * 0.22);
+      dummy.scale.setScalar(Math.max(0.0001, Math.sin(life * Math.PI) * 0.22));
       dummy.updateMatrix();
       inst.setMatrixAt(i, dummy.matrix);
     }

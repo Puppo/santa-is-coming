@@ -9,9 +9,11 @@ export function PostEffects({ enabled }: { enabled: boolean }) {
     <EffectComposer multisampling={0}>
       <Bloom
         mipmapBlur
-        luminanceThreshold={1.06}
-        luminanceSmoothing={0.28}
-        intensity={partyMode ? 0.85 : 0.58}
+        levels={5}
+        radius={0.62}
+        luminanceThreshold={1.15}
+        luminanceSmoothing={0.25}
+        intensity={partyMode ? 0.72 : 0.48}
       />
       <Vignette eskil={false} offset={0.28} darkness={0.34} />
     </EffectComposer>

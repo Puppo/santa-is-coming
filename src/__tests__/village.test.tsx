@@ -3,7 +3,9 @@ import path from 'node:path';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { describe, expect, it, vi } from 'vitest';
+import { sanitizeHdrDataTexture } from '../assets/asyncAssets';
 import { MODEL_PATHS } from '../assets/modelRegistry';
 import { POLYHAVEN_PATHS } from '../assets/pbrMaterials';
 import { CHRISTMAS_TRACKS } from '../audio/tracks';
@@ -179,6 +181,67 @@ describe('Santa Village Assets & Translations', () => {
           expect(clampedY).toBeGreaterThanOrEqual(getGroundHeight(sideWorld.x, sideWorld.z));
         }
       }
+    }
+  });
+
+  it('clamps extreme FP16 HDRI radiance spikes so HalfFloat Bloom never overflows to NaN', () => {
+    const loader = new HDRLoader();
+    const hdrFiles = [
+      'public/polyhaven/hdri/rogland_moonlit_night_1k.hdr',
+      'public/polyhaven/hdri/passendorf_snow_1k.hdr',
+    ];
+
+    for (const relPath of hdrFiles) {
+      const bytes = fs.readFileSync(path.join(ROOT_DIR, relPath));
+      const localBuffer = new ArrayBuffer(bytes.byteLength);
+      new Uint8Array(localBuffer).set(bytes);
+
+      const parsed = loader.parse(localBuffer);
+      const tex = new THREE.DataTexture(
+        parsed.data,
+        parsed.width,
+        parsed.height,
+        THREE.RGBAFormat,
+        parsed.type,
+      );
+
+      sanitizeHdrDataTexture(tex, 12);
+
+      const data = tex.image.data;
+      expect(data).toBeTruthy();
+
+      let invalidCount = 0;
+      let minDecoded = Number.POSITIVE_INFINITY;
+      let maxDecoded = Number.NEGATIVE_INFINITY;
+
+      if (data instanceof Uint16Array) {
+        for (let i = 0; i < data.length; i++) {
+          if (i % 4 === 3) continue;
+          const v = THREE.DataUtils.fromHalfFloat(data[i]);
+          if (!Number.isFinite(v)) {
+            invalidCount++;
+          } else {
+            if (v < minDecoded) minDecoded = v;
+            if (v > maxDecoded) maxDecoded = v;
+          }
+        }
+      } else if (data instanceof Float32Array) {
+        for (let i = 0; i < data.length; i++) {
+          if (i % 4 === 3) continue;
+          const v = data[i];
+          if (!Number.isFinite(v)) {
+            invalidCount++;
+          } else {
+            if (v < minDecoded) minDecoded = v;
+            if (v > maxDecoded) maxDecoded = v;
+          }
+        }
+      }
+
+      expect(invalidCount).toBe(0);
+      expect(minDecoded).toBeGreaterThanOrEqual(0);
+      expect(maxDecoded).toBeLessThanOrEqual(12.05);
+      tex.dispose();
     }
   });
 });

@@ -201,7 +201,7 @@ export function GreatTreePlaza() {
           const a = phase * Math.PI * 6 + i;
           const r = (1 - phase * 0.7) * 2.15;
           dummy.position.set(Math.cos(a) * r, 0.6 + phase * 5.6, Math.sin(a) * r);
-          dummy.scale.setScalar(Math.sin(phase * Math.PI) * 0.11);
+          dummy.scale.setScalar(Math.max(0.0001, Math.sin(phase * Math.PI) * 0.11));
           dummy.updateMatrix();
           sparkleRef.current.setMatrixAt(i, dummy.matrix);
         }

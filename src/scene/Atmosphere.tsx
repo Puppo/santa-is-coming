@@ -114,17 +114,42 @@ export function Atmosphere() {
   const { atmosphere, motionPaused, partyMode, isMusicPlaying } = useVillage();
   const cfg = ATMOSPHERE_CONFIG[atmosphere];
   const mobileGpu = useMemo(() => isMobileGpuDevice(), []);
+  const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
 
   const auroraMatRef = useRef<THREE.ShaderMaterial>(null);
+  const pmremCacheRef = useRef<Map<string, THREE.WebGLRenderTarget>>(new Map());
 
   const activeHdri = atmosphere === 'day' ? POLYHAVEN_PATHS.hdriDay : POLYHAVEN_PATHS.hdriNight;
 
   useEffect(() => {
+    const cache = pmremCacheRef.current;
+    return () => {
+      for (const rt of cache.values()) {
+        rt.dispose();
+      }
+      cache.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     scene.environmentIntensity = cfg.envIntensity;
+
+    const applyEnvTexture = (equirectTex: THREE.DataTexture) => {
+      let rt = pmremCacheRef.current.get(activeHdri);
+      if (!rt) {
+        const pmrem = new THREE.PMREMGenerator(gl);
+        pmrem.compileEquirectangularShader();
+        rt = pmrem.fromEquirectangular(equirectTex);
+        pmrem.dispose();
+        pmremCacheRef.current.set(activeHdri, rt);
+      }
+      scene.environment = rt.texture;
+    };
+
     const cached = getResolvedHdri(activeHdri);
     if (cached) {
-      scene.environment = cached;
+      applyEnvTexture(cached);
       return undefined;
     }
 
@@ -132,7 +157,7 @@ export function Atmosphere() {
     const timer = window.setTimeout(() => {
       void loadCachedHdri(activeHdri).then((envTex) => {
         if (!cancelled && envTex) {
-          scene.environment = envTex;
+          applyEnvTexture(envTex);
         }
       });
     }, 80);
@@ -141,7 +166,7 @@ export function Atmosphere() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [scene, activeHdri, cfg.envIntensity]);
+  }, [scene, gl, activeHdri, cfg.envIntensity]);
 
   const starsGeo = useMemo(() => {
     const count = 420;

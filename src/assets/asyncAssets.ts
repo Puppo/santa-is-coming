@@ -147,6 +147,41 @@ export function useAsyncGltf(url: string): GLTF | null {
   return gltf;
 }
 
+/**
+ * Clamps extreme radiance texels and sanitizes non-finite/negative samples in loaded HDRI
+ * textures so HalfFloat post-processing targets never overflow to Infinity/NaN.
+ */
+export function sanitizeHdrDataTexture(
+  tex: THREE.DataTexture,
+  maxRadiance = 12,
+): THREE.DataTexture {
+  const rawData = tex.image?.data;
+  if (rawData instanceof Uint16Array) {
+    const clampedMaxHalf = THREE.DataUtils.toHalfFloat(maxRadiance);
+    for (let i = 0; i < rawData.length; i++) {
+      if (i % 4 === 3) continue;
+      const v = THREE.DataUtils.fromHalfFloat(rawData[i]);
+      if (!Number.isFinite(v) || v < 0) {
+        rawData[i] = 0;
+      } else if (v > maxRadiance) {
+        rawData[i] = clampedMaxHalf;
+      }
+    }
+  } else if (rawData instanceof Float32Array) {
+    for (let i = 0; i < rawData.length; i++) {
+      if (i % 4 === 3) continue;
+      const v = rawData[i];
+      if (!Number.isFinite(v) || v < 0) {
+        rawData[i] = 0;
+      } else if (v > maxRadiance) {
+        rawData[i] = maxRadiance;
+      }
+    }
+  }
+  tex.needsUpdate = true;
+  return tex;
+}
+
 export function loadCachedHdri(url: string): Promise<THREE.DataTexture | null> {
   const existing = resolvedHdri.get(url);
   if (existing) {
@@ -159,6 +194,7 @@ export function loadCachedHdri(url: string): Promise<THREE.DataTexture | null> {
 
   const promise = withRetry(() => hdrLoader.loadAsync(url), 2, 500)
     .then((tex) => {
+      sanitizeHdrDataTexture(tex, 12);
       tex.mapping = THREE.EquirectangularReflectionMapping;
       resolvedHdri.set(url, tex);
       pendingHdri.delete(url);

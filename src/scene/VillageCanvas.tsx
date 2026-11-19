@@ -55,7 +55,7 @@ class SceneErrorBoundary extends Component<{ children: ReactNode }, BoundaryStat
 export function VillageCanvas() {
   const initialMobile = useMemo(() => isMobileGpuDevice(), []);
   const [dpr, setDpr] = useState<[number, number]>(initialMobile ? [1, 1.5] : [1, 2]);
-  const [enablePostFx, setEnablePostFx] = useState(!initialMobile);
+  const enablePostFx = !initialMobile;
 
   useLayoutEffect(() => {
     void preloadGltf(MODEL_PATHS.stagRigged);
@@ -82,11 +82,6 @@ export function VillageCanvas() {
           <PerformanceMonitor
             onDecline={() => {
               setDpr([1, 1.25]);
-              setEnablePostFx(false);
-            }}
-            onIncline={() => {
-              setDpr(initialMobile ? [1, 1.5] : [1, 2]);
-              setEnablePostFx(!initialMobile);
             }}
           />
 
