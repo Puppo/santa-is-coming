@@ -5,6 +5,45 @@ import * as THREE from 'three';
 import { useVillage } from '../state/villageStore';
 import { ZONE_CAMERA_PRESETS } from './terrainMath';
 
+export interface ShortestArcControls {
+  setLookAt: (
+    positionX: number,
+    positionY: number,
+    positionZ: number,
+    targetX: number,
+    targetY: number,
+    targetZ: number,
+    enableTransition?: boolean,
+  ) => Promise<void>;
+  normalizeRotations: () => unknown;
+}
+
+/**
+ * Transitions CameraControls to a lookAt pose and normalizes accumulated
+ * multi-turn azimuth angles so the camera always takes the <=180° shortest arc.
+ */
+export function moveCameraShortestArc(
+  controls: ShortestArcControls,
+  positionX: number,
+  positionY: number,
+  positionZ: number,
+  targetX: number,
+  targetY: number,
+  targetZ: number,
+  enableTransition: boolean,
+): void {
+  void controls.setLookAt(
+    positionX,
+    positionY,
+    positionZ,
+    targetX,
+    targetY,
+    targetZ,
+    enableTransition,
+  );
+  controls.normalizeRotations();
+}
+
 export function CameraRig() {
   const controlsRef = useRef<ComponentRef<typeof CameraControls>>(null);
   const { activeZone, motionPaused, sleighFlightActive } = useVillage();
@@ -33,26 +72,27 @@ export function CameraRig() {
 
     if (sleighFlightActive) {
       if (isPortrait) {
-        void controls.setLookAt(0.5, 12.6, 30.2, 0.1, 2.6, 1.0, animate);
+        moveCameraShortestArc(controls, 0.5, 12.6, 30.2, 0.1, 2.6, 1.0, animate);
       } else {
-        void controls.setLookAt(0.3, 10.6, 24.8, 0, 2.6, 0.4, animate);
+        moveCameraShortestArc(controls, 0.3, 10.6, 24.8, 0, 2.6, 0.4, animate);
       }
       return;
     }
 
     if (isPortrait && activeZone === 'overview') {
-      void controls.setLookAt(0.65, 12.0, 28.6, 0.35, 1.35, 1.2, animate);
+      moveCameraShortestArc(controls, 0.65, 12.0, 28.6, 0.35, 1.35, 1.2, animate);
       return;
     }
 
     if (isPortrait && activeZone === 'sleigh') {
-      void controls.setLookAt(8.8, 5.6, 22.0, 1.9, 1.0, 9.4, animate);
+      moveCameraShortestArc(controls, 8.8, 5.6, 22.0, 1.9, 1.0, 9.4, animate);
       return;
     }
 
     const zoomOut = isPortrait ? 1.14 : 1.0;
 
-    void controls.setLookAt(
+    moveCameraShortestArc(
+      controls,
       preset.position[0] * zoomOut,
       preset.position[1],
       preset.position[2] * zoomOut,
@@ -75,6 +115,9 @@ export function CameraRig() {
       draggingSmoothTime={0.18}
       dollySpeed={0.8}
       truckSpeed={0.8}
+      onEnd={() => {
+        controlsRef.current?.normalizeRotations();
+      }}
     />
   );
 }

@@ -14,6 +14,7 @@ import { HeaderHud } from '../components/HeaderHud';
 import { MusicPlayerBar } from '../components/MusicPlayerBar';
 import { ZoneDock } from '../components/ZoneDock';
 import { TRANSLATIONS } from '../i18n/translations';
+import { moveCameraShortestArc } from '../scene/CameraRig';
 import { createReindeerInstance, prepareReindeerTemplate } from '../scene/characters/ReindeerHerd';
 import {
   BASE_ROT_Y,
@@ -394,6 +395,41 @@ describe('Accessible HUD & Controls', () => {
       expect(probe.textContent).toBe('true');
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('normalizes accumulated multi-turn camera azimuth after setLookAt so transitions take the shortest arc', () => {
+    const TWO_PI = Math.PI * 2;
+    for (const turns of [5.1, -4.8, 4.52]) {
+      const calls: string[] = [];
+      let thetaStart = turns * TWO_PI + 0.012;
+      let thetaEnd = thetaStart;
+
+      const mockControls = {
+        setLookAt(
+          px: number,
+          _py: number,
+          pz: number,
+          tx: number,
+          _ty: number,
+          tz: number,
+        ): Promise<void> {
+          calls.push('setLookAt');
+          thetaEnd = Math.atan2(px - tx, pz - tz);
+          return Promise.resolve();
+        },
+        normalizeRotations() {
+          calls.push('normalizeRotations');
+          thetaEnd = ((thetaEnd % TWO_PI) + TWO_PI) % TWO_PI;
+          if (thetaEnd > Math.PI) thetaEnd -= TWO_PI;
+          thetaStart += TWO_PI * Math.round((thetaEnd - thetaStart) / TWO_PI);
+        },
+      };
+
+      moveCameraShortestArc(mockControls, 0.3, 10.6, 24.8, 0, 2.6, 0.4, true);
+
+      expect(calls).toEqual(['setLookAt', 'normalizeRotations']);
+      expect(Math.abs(thetaEnd - thetaStart)).toBeLessThanOrEqual(Math.PI + 1e-6);
     }
   });
 });
