@@ -6,6 +6,7 @@ import { getFabricNormalMap } from '../../assets/proceduralTextures';
 import { useVillage } from '../../state/villageStore';
 import { ReindeerHerd } from '../characters/ReindeerHerd';
 import { SleighSanta } from '../characters/RiggedSanta';
+import { SLEIGH_LAMP_PLACEMENTS, villageCollisionWorld } from '../collisionSystem';
 import { VictorianStreetLamp, WarmWoodenLantern } from '../PolyHavenProp';
 import { RealisticGift } from '../RealisticGift';
 import { BASE_ROT_Y, createSleighFlightTrack, PADDOCK_X, PADDOCK_Z } from '../sleighFlightPath';
@@ -115,6 +116,12 @@ export function SleighPaddock() {
       flightTrack.sampleCarriagePose(0, 0, rig.position, rig.quaternion);
     }
 
+    villageCollisionWorld.updateSleighFlight(
+      sleighFlightActive,
+      flightProgressRef.current,
+      flightTrack,
+    );
+
     if (trailRef.current) {
       const trailFade = trailSmoothstep(0.05, 0.45, currentSampleHeight);
       trailRef.current.visible = sleighFlightActive && !motionPaused && trailFade > 0.01;
@@ -152,11 +159,13 @@ export function SleighPaddock() {
           position={[PADDOCK_X + fx, getGroundHeight(PADDOCK_X + fx, 11.6), 11.6]}
         />
       ))}
-      <VictorianStreetLamp
-        position={[-4.6, getGroundHeight(-4.6, 7.2), 7.2]}
-        lightIntensity={2.8}
-      />
-      <VictorianStreetLamp position={[2.4, getGroundHeight(2.4, 7.6), 7.6]} lightIntensity={2.8} />
+      {SLEIGH_LAMP_PLACEMENTS.map(([lx, lz]) => (
+        <VictorianStreetLamp
+          key={`sleigh-lamp-${lx}-${lz}`}
+          position={[lx, getGroundHeight(lx, lz), lz]}
+          lightIntensity={2.8}
+        />
+      ))}
 
       {/* Shared warm paddock illumination for the sleigh & reindeer team */}
       <pointLight

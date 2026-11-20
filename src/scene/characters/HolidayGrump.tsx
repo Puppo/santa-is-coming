@@ -1,8 +1,15 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { getFabricNormalMap } from '../../assets/proceduralTextures';
 import { useVillage } from '../../state/villageStore';
+import {
+  createGrumpCaughtCurve,
+  createGrumpEscapedCurve,
+  createGrumpSneakCurve,
+  GRUMP_PEEK_POS,
+  villageCollisionWorld,
+} from '../collisionSystem';
 import { RealisticGift } from '../RealisticGift';
 import { getGroundHeight } from '../terrainMath';
 
@@ -17,46 +24,68 @@ export function HolidayGrump() {
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
 
-  const sneakCurve = useMemo(
-    () =>
-      new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-4.6, 0, -6.2),
-        new THREE.Vector3(-2.6, 0, -3.2),
-        new THREE.Vector3(-1.3, 0, -1.6),
-        new THREE.Vector3(0.4, 0, -1.9),
-      ]),
-    [],
-  );
-
+  const sneakCurve = useMemo(() => createGrumpSneakCurve(), []);
+  const retreatCurveRef = useRef<THREE.CatmullRomCurve3 | null>(null);
+  const currentPosRef = useRef<[number, number]>([GRUMP_PEEK_POS[0], GRUMP_PEEK_POS[1]]);
   const phaseStartRef = useRef(0);
+  const sneakProgressRef = useRef(0);
   const lastStateRef = useRef(grumpState);
   const tmpPos = useMemo(() => new THREE.Vector3(), []);
   const tmpNext = useMemo(() => new THREE.Vector3(), []);
 
-  useFrame((state) => {
+  useEffect(() => {
+    return () => {
+      villageCollisionWorld.removeAgent('grump');
+    };
+  }, []);
+
+  useFrame((state, delta) => {
     const root = rootRef.current;
     if (!root) return;
 
+    const clampedDelta = Math.min(delta, 0.1);
+    const t = state.clock.elapsedTime;
+
     if (lastStateRef.current !== grumpState) {
       lastStateRef.current = grumpState;
-      phaseStartRef.current = state.clock.elapsedTime;
+      phaseStartRef.current = t;
+      if (grumpState === 'sneaking' || grumpState === 'peeking') {
+        sneakProgressRef.current = 0;
+        retreatCurveRef.current = null;
+      } else if (grumpState === 'caught') {
+        retreatCurveRef.current = createGrumpCaughtCurve(
+          currentPosRef.current[0],
+          currentPosRef.current[1],
+        );
+      } else if (grumpState === 'escaped') {
+        retreatCurveRef.current = createGrumpEscapedCurve(
+          currentPosRef.current[0],
+          currentPosRef.current[1],
+        );
+      }
     }
 
     if (grumpState === 'idle') {
       root.visible = false;
+      villageCollisionWorld.removeAgent('grump');
       return;
     }
 
     root.visible = true;
-    const t = state.clock.elapsedTime;
     const elapsed = t - phaseStartRef.current;
 
     if (grumpState === 'peeking') {
-      const px = -4.6;
-      const pz = -6.2;
-      const py = getGroundHeight(px, pz);
+      const [px, pz] = GRUMP_PEEK_POS;
       const pop = Math.min(1, elapsed * 1.4);
-      root.position.set(px + (1 - pop) * -0.9, py, pz);
+      const resolved = villageCollisionWorld.resolveAgent(
+        'grump',
+        px + (1 - pop) * -0.45,
+        pz,
+        0.34,
+        30,
+      );
+      currentPosRef.current = [resolved.x, resolved.z];
+      root.position.set(resolved.x, getGroundHeight(resolved.x, resolved.z), resolved.z);
       root.lookAt(0, 0.5, 0);
       if (bodyRef.current) {
         bodyRef.current.rotation.y = Math.sin(t * 2.5) * 0.35;
@@ -67,15 +96,29 @@ export function HolidayGrump() {
         rightArmRef.current.rotation.x = -0.5;
       }
     } else if (grumpState === 'sneaking') {
-      const u = motionPaused ? 0.5 : Math.min(1, elapsed / 11);
+      sneakCurve.getPointAt(Math.min(1, sneakProgressRef.current), tmpPos);
+      const shouldYield =
+        !motionPaused && villageCollisionWorld.shouldYield('grump', tmpPos.x, tmpPos.z, 0.34, 30);
+      if (!motionPaused && !shouldYield) {
+        sneakProgressRef.current = Math.min(1, sneakProgressRef.current + clampedDelta / 11);
+      }
+
+      const u = motionPaused ? 0.5 : sneakProgressRef.current;
       sneakCurve.getPointAt(u, tmpPos);
       sneakCurve.getPointAt(Math.min(1, u + 0.02), tmpNext);
-      const gy = getGroundHeight(tmpPos.x, tmpPos.z);
-      root.position.set(tmpPos.x, gy, tmpPos.z);
-      root.lookAt(tmpNext.x, getGroundHeight(tmpNext.x, tmpNext.z), tmpNext.z);
+      const resolved = villageCollisionWorld.resolveAgent('grump', tmpPos.x, tmpPos.z, 0.34, 30);
+      const blend = 1 - Math.exp(-clampedDelta * 12);
+      const renderX = THREE.MathUtils.lerp(currentPosRef.current[0], resolved.x, blend);
+      const renderZ = THREE.MathUtils.lerp(currentPosRef.current[1], resolved.z, blend);
+      currentPosRef.current = [renderX, renderZ];
+
+      const lookX = tmpNext.x + (resolved.x - tmpPos.x);
+      const lookZ = tmpNext.z + (resolved.z - tmpPos.z);
+      root.position.set(renderX, getGroundHeight(renderX, renderZ), renderZ);
+      root.lookAt(lookX, getGroundHeight(lookX, lookZ), lookZ);
 
       // Exaggerated sneaky tiptoe cycle
-      const step = motionPaused ? 0 : Math.sin(t * 6.8);
+      const step = motionPaused || shouldYield ? 0 : Math.sin(t * 6.8);
       if (bodyRef.current) {
         bodyRef.current.position.y = Math.abs(step) * 0.08;
         bodyRef.current.rotation.x = 0.22; // hunched sneak posture
@@ -90,13 +133,17 @@ export function HolidayGrump() {
       }
     } else if (grumpState === 'caught') {
       const k = Math.min(1, elapsed / 3.4);
-      const retreatX = THREE.MathUtils.lerp(-1.5, -13.5, k);
-      const retreatZ = THREE.MathUtils.lerp(-1.8, -11.5, k);
+      const curve = retreatCurveRef.current ?? createGrumpCaughtCurve(0.55, -4.35);
+      curve.getPointAt(k, tmpPos);
+      curve.getPointAt(Math.min(1, k + 0.03), tmpNext);
+      const resolved = villageCollisionWorld.resolveAgent('grump', tmpPos.x, tmpPos.z, 0.34, 30);
+      currentPosRef.current = [resolved.x, resolved.z];
+
       const jumpArc =
         k < 0.28 ? Math.sin((k / 0.28) * Math.PI) * 1.45 : Math.abs(Math.sin(t * 13)) * 0.16;
 
-      root.position.set(retreatX, getGroundHeight(retreatX, retreatZ) + jumpArc, retreatZ);
-      root.lookAt(-15, 0.5, -13);
+      root.position.set(resolved.x, getGroundHeight(resolved.x, resolved.z) + jumpArc, resolved.z);
+      root.lookAt(tmpNext.x, 0.5, tmpNext.z);
       if (bodyRef.current) {
         bodyRef.current.rotation.x = 0;
         bodyRef.current.rotation.y = k < 0.35 ? k * Math.PI * 8 : 0;
@@ -112,10 +159,14 @@ export function HolidayGrump() {
       }
     } else if (grumpState === 'escaped') {
       const k = Math.min(1, elapsed / 2.6);
-      const retreatX = THREE.MathUtils.lerp(0.2, -10.5, k);
-      const retreatZ = THREE.MathUtils.lerp(-1.9, -10.0, k);
-      root.position.set(retreatX, getGroundHeight(retreatX, retreatZ), retreatZ);
-      root.lookAt(-12, 0.5, -11);
+      const curve = retreatCurveRef.current ?? createGrumpEscapedCurve(0.55, -4.35);
+      curve.getPointAt(k, tmpPos);
+      curve.getPointAt(Math.min(1, k + 0.03), tmpNext);
+      const resolved = villageCollisionWorld.resolveAgent('grump', tmpPos.x, tmpPos.z, 0.34, 30);
+      currentPosRef.current = [resolved.x, resolved.z];
+
+      root.position.set(resolved.x, getGroundHeight(resolved.x, resolved.z), resolved.z);
+      root.lookAt(tmpNext.x, 0.5, tmpNext.z);
       if (bodyRef.current) {
         bodyRef.current.rotation.y = 0;
         bodyRef.current.rotation.x = 0.1;

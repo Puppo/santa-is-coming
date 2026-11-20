@@ -3,6 +3,8 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { christmasAudioEngine } from '../audio/audioEngine';
 import { useVillage } from '../state/villageStore';
+import { PLAZA_LAMP_PLACEMENTS, SLEIGH_LAMP_PLACEMENTS } from './collisionSystem';
+import { getGroundHeight } from './terrainMath';
 
 interface StrandDef {
   from: [number, number, number];
@@ -11,19 +13,38 @@ interface StrandDef {
   bulbs: number;
 }
 
+const lampTop = (x: number, z: number): [number, number, number] => [
+  x,
+  getGroundHeight(x, z) + 2.66,
+  z,
+];
+
+const [nwLamp, neLamp, swLamp, seLamp] = PLAZA_LAMP_PLACEMENTS;
+const [sleighWestLamp, sleighEastLamp] = SLEIGH_LAMP_PLACEMENTS;
+
 const STRANDS: StrandDef[] = [
   // Elf Workshop porch beam -> Plaza NW Streetlamp
-  { from: [-6.65, 2.58, -2.35], to: [-4.5, 2.66, -2.5], sag: 0.38, bulbs: 8 },
+  { from: [-6.65, 2.58, -2.35], to: lampTop(nwLamp[0], nwLamp[1]), sag: 0.38, bulbs: 8 },
   // Santa's Cabin porch beam -> Plaza NE Streetlamp
-  { from: [6.45, 2.58, -2.55], to: [4.5, 2.66, -2.5], sag: 0.38, bulbs: 8 },
+  { from: [6.45, 2.58, -2.55], to: lampTop(neLamp[0], neLamp[1]), sag: 0.38, bulbs: 8 },
   // Plaza NW Lamp -> Plaza SW Lamp
-  { from: [-4.5, 2.66, -2.5], to: [-4.3, 2.66, 3.6], sag: 0.65, bulbs: 10 },
+  { from: lampTop(nwLamp[0], nwLamp[1]), to: lampTop(swLamp[0], swLamp[1]), sag: 0.65, bulbs: 10 },
   // Plaza NE Lamp -> Plaza SE Lamp
-  { from: [4.5, 2.66, -2.5], to: [3.1, 2.66, 4.4], sag: 0.68, bulbs: 10 },
+  { from: lampTop(neLamp[0], neLamp[1]), to: lampTop(seLamp[0], seLamp[1]), sag: 0.68, bulbs: 10 },
   // Plaza SW Lamp -> Sleigh West Lamp
-  { from: [-4.3, 2.66, 3.6], to: [-4.2, 2.66, 8.2], sag: 0.52, bulbs: 9 },
+  {
+    from: lampTop(swLamp[0], swLamp[1]),
+    to: lampTop(sleighWestLamp[0], sleighWestLamp[1]),
+    sag: 0.52,
+    bulbs: 9,
+  },
   // Plaza SE Lamp -> Sleigh East Lamp
-  { from: [3.1, 2.66, 4.4], to: [2.4, 2.66, 8.0], sag: 0.46, bulbs: 8 },
+  {
+    from: lampTop(seLamp[0], seLamp[1]),
+    to: lampTop(sleighEastLamp[0], sleighEastLamp[1]),
+    sag: 0.46,
+    bulbs: 8,
+  },
 ];
 
 const FESTIVE_PALETTE = [

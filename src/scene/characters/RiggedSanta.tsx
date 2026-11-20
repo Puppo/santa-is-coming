@@ -1,10 +1,11 @@
 import { useFrame } from '@react-three/fiber';
-import { type RefObject, useMemo, useRef } from 'react';
+import { type RefObject, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { getFabricNormalMap } from '../../assets/proceduralTextures';
 import { christmasAudioEngine } from '../../audio/audioEngine';
 import { playSleighBells } from '../../audio/soundEffects';
 import { useVillage } from '../../state/villageStore';
+import { createSantaPatrolCurve, villageCollisionWorld } from '../collisionSystem';
 import { getGroundHeight } from '../terrainMath';
 
 interface SantaFigureProps {
@@ -251,54 +252,75 @@ export function RiggedSanta() {
   const progressRef = useRef(0.1);
   const waveBurstRef = useRef(0);
 
-  const patrolCurve = useMemo(
-    () =>
-      new THREE.CatmullRomCurve3(
-        [
-          new THREE.Vector3(5.6, 0, -2.0),
-          new THREE.Vector3(2.8, 0, -1.0),
-          new THREE.Vector3(2.2, 0, 2.2),
-          new THREE.Vector3(0.4, 0, 6.4),
-          new THREE.Vector3(2.4, 0, 3.6),
-          new THREE.Vector3(4.2, 0, -0.6),
-        ],
-        true,
-      ),
-    [],
-  );
+  const patrolCurve = useMemo(() => createSantaPatrolCurve(), []);
+  const smoothedPosRef = useRef<[number, number] | null>(null);
 
   const tmpPos = useMemo(() => new THREE.Vector3(), []);
   const tmpNext = useMemo(() => new THREE.Vector3(), []);
+
+  useEffect(() => {
+    return () => {
+      villageCollisionWorld.removeAgent('santa');
+    };
+  }, []);
 
   useFrame((state, delta) => {
     const root = rootRef.current;
     if (!root) return;
 
+    const clampedDelta = Math.min(delta, 0.1);
     if (waveBurstRef.current > 0) {
-      waveBurstRef.current = Math.max(0, waveBurstRef.current - delta * 0.7);
+      waveBurstRef.current = Math.max(0, waveBurstRef.current - clampedDelta * 0.7);
     }
 
-    // Hide ground Santa while he rides in the Sleigh Test Flight
+    // Hide ground Santa and clear his collision volume while he rides in the Sleigh Test Flight
     root.visible = !sleighFlightActive;
-    if (sleighFlightActive) return;
+    if (sleighFlightActive) {
+      villageCollisionWorld.removeAgent('santa');
+      return;
+    }
 
-    if (!motionPaused) {
-      progressRef.current = (progressRef.current + delta * 0.026) % 1;
+    patrolCurve.getPointAt(progressRef.current, tmpPos);
+    const shouldYield =
+      !motionPaused && villageCollisionWorld.shouldYield('santa', tmpPos.x, tmpPos.z, 0.4, 60);
+
+    if (!motionPaused && !shouldYield) {
+      progressRef.current = (progressRef.current + clampedDelta * 0.042) % 1;
     }
 
     const u = progressRef.current;
     patrolCurve.getPointAt(u, tmpPos);
     patrolCurve.getPointAt((u + 0.012) % 1, tmpNext);
 
+    const resolved = villageCollisionWorld.resolveAgent('santa', tmpPos.x, tmpPos.z, 0.4, 60);
+    if (!smoothedPosRef.current) {
+      smoothedPosRef.current = [resolved.x, resolved.z];
+    } else {
+      const blend = 1 - Math.exp(-clampedDelta * 12);
+      smoothedPosRef.current[0] = THREE.MathUtils.lerp(
+        smoothedPosRef.current[0],
+        resolved.x,
+        blend,
+      );
+      smoothedPosRef.current[1] = THREE.MathUtils.lerp(
+        smoothedPosRef.current[1],
+        resolved.z,
+        blend,
+      );
+    }
+    const [renderX, renderZ] = smoothedPosRef.current;
+
     const t = state.clock.elapsedTime;
-    const stride = motionPaused ? 0 : Math.sin(t * 5.2);
-    const groundY = getGroundHeight(tmpPos.x, tmpPos.z);
-    const nextY = getGroundHeight(tmpNext.x, tmpNext.z);
+    const stride = motionPaused || shouldYield ? 0 : Math.sin(t * 5.2);
+    const groundY = getGroundHeight(renderX, renderZ);
+    const lookX = tmpNext.x + (resolved.x - tmpPos.x);
+    const lookZ = tmpNext.z + (resolved.z - tmpPos.z);
+    const nextY = getGroundHeight(lookX, lookZ);
 
     const bounce =
       partyMode && !motionPaused ? Math.abs(Math.sin(t * 4.5)) * 0.14 : Math.abs(stride) * 0.04;
-    root.position.set(tmpPos.x, groundY + bounce, tmpPos.z);
-    root.lookAt(tmpNext.x, nextY, tmpNext.z);
+    root.position.set(renderX, groundY + bounce, renderZ);
+    root.lookAt(lookX, nextY, lookZ);
 
     if (leftLegRef.current && rightLegRef.current) {
       leftLegRef.current.rotation.x = stride * 0.42;

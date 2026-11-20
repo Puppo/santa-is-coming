@@ -6,25 +6,25 @@ import { getGroundHeight, ISLAND_RADIUS } from './terrainMath';
 
 const PATH_CURVES = [
   [
-    new THREE.Vector3(-6.2, 0, -2.5),
-    new THREE.Vector3(-3.2, 0, -1.2),
-    new THREE.Vector3(-0.6, 0, -0.3),
+    new THREE.Vector3(-6.4, 0, -2.1),
+    new THREE.Vector3(-3.8, 0, -1.5),
+    new THREE.Vector3(-1.95, 0, -1.1),
   ],
   [
-    new THREE.Vector3(6.0, 0, -2.6),
-    new THREE.Vector3(3.1, 0, -1.3),
-    new THREE.Vector3(0.6, 0, -0.3),
+    new THREE.Vector3(6.2, 0, -2.2),
+    new THREE.Vector3(3.8, 0, -1.5),
+    new THREE.Vector3(1.95, 0, -1.1),
   ],
   [
-    new THREE.Vector3(0.0, 0, 1.8),
-    new THREE.Vector3(-0.5, 0, 4.8),
-    new THREE.Vector3(-1.2, 0, 7.2),
+    new THREE.Vector3(-0.3, 0, 2.15),
+    new THREE.Vector3(-1.2, 0, 4.8),
+    new THREE.Vector3(-2.3, 0, 7.4),
   ],
   [
-    new THREE.Vector3(-7.5, 0, -1.5),
-    new THREE.Vector3(-6.8, 0, 3.5),
-    new THREE.Vector3(-4.2, 0, 7.6),
-    new THREE.Vector3(-1.8, 0, 8.6),
+    new THREE.Vector3(-6.8, 0, -0.8),
+    new THREE.Vector3(-7.0, 0, 3.3),
+    new THREE.Vector3(-5.8, 0, 7.6),
+    new THREE.Vector3(-3.6, 0, 9.5),
   ],
 ];
 

@@ -9,12 +9,19 @@ import { getFabricNormalMap } from '../../assets/proceduralTextures';
 import { playMagicChime } from '../../audio/soundEffects';
 import { useVillage } from '../../state/villageStore';
 import { ChimneySmoke } from '../ChimneySmoke';
+import {
+  PLAZA_BENCH_POSE,
+  PLAZA_LAMP_PLACEMENTS,
+  SNOWMAN_PLACEMENTS,
+  TRAIN_CAR_OFFSETS,
+  TRAIN_TRACK_RADIUS,
+  villageCollisionWorld,
+} from '../collisionSystem';
 import { PhotogrammetryBench, VictorianStreetLamp } from '../PolyHavenProp';
 import { RealisticGift } from '../RealisticGift';
 import { HeroChristmasSpruce } from '../RealisticSpruce';
 import { getGroundHeight } from '../terrainMath';
 
-const TRACK_RADIUS = 3.45;
 const SLEEPER_COUNT = 34;
 
 function SmoothedTrainCar({ model }: { model: ModelKey }) {
@@ -160,7 +167,7 @@ export function GreatTreePlaza() {
       Array.from({ length: SLEEPER_COUNT }, (_, i) => {
         const a = (i / SLEEPER_COUNT) * Math.PI * 2;
         return {
-          pos: [Math.cos(a) * TRACK_RADIUS, 0.025, Math.sin(a) * TRACK_RADIUS] as [
+          pos: [Math.cos(a) * TRAIN_TRACK_RADIUS, 0.025, Math.sin(a) * TRAIN_TRACK_RADIUS] as [
             number,
             number,
             number,
@@ -173,8 +180,8 @@ export function GreatTreePlaza() {
 
   const placeTrainCar = (ref: THREE.Group | null, angle: number) => {
     if (!ref) return;
-    const x = Math.cos(angle) * TRACK_RADIUS;
-    const z = Math.sin(angle) * TRACK_RADIUS;
+    const x = Math.cos(angle) * TRAIN_TRACK_RADIUS;
+    const z = Math.sin(angle) * TRAIN_TRACK_RADIUS;
     ref.position.set(x, 0.05, z);
     ref.rotation.set(0, Math.atan2(-Math.sin(angle), Math.cos(angle)), 0);
   };
@@ -187,10 +194,11 @@ export function GreatTreePlaza() {
       trainAngleRef.current += delta * speed;
     }
     const baseAngle = trainAngleRef.current;
-    placeTrainCar(locoRef.current, baseAngle);
-    placeTrainCar(tenderRef.current, baseAngle - 0.22);
-    placeTrainCar(wagon1Ref.current, baseAngle - 0.43);
-    placeTrainCar(wagon2Ref.current, baseAngle - 0.64);
+    villageCollisionWorld.updateTrainAngle(baseAngle);
+    placeTrainCar(locoRef.current, baseAngle + TRAIN_CAR_OFFSETS[0]);
+    placeTrainCar(tenderRef.current, baseAngle + TRAIN_CAR_OFFSETS[1]);
+    placeTrainCar(wagon1Ref.current, baseAngle + TRAIN_CAR_OFFSETS[2]);
+    placeTrainCar(wagon2Ref.current, baseAngle + TRAIN_CAR_OFFSETS[3]);
 
     if (sparkleRef.current) {
       const active = treeBurstActive || partyMode;
@@ -214,8 +222,10 @@ export function GreatTreePlaza() {
     }
   });
 
-  const pondSnowmanY = getGroundHeight(2.6, 5.2);
-  const benchY = getGroundHeight(-3.8, 2.8);
+  const primarySnowman = SNOWMAN_PLACEMENTS[0];
+  const secondarySnowman = SNOWMAN_PLACEMENTS[1];
+  const pondSnowmanY = getGroundHeight(primarySnowman.x, primarySnowman.z);
+  const benchY = getGroundHeight(PLAZA_BENCH_POSE.x, PLAZA_BENCH_POSE.z);
 
   return (
     <group name="great-tree-plaza">
@@ -263,30 +273,30 @@ export function GreatTreePlaza() {
         </instancedMesh>
       </group>
 
-      {/* Wrapped Satin-Bow Presents Under the Tree */}
+      {/* Wrapped Satin-Bow Presents Under the Tree Atop the Snow Pedestal */}
       <RealisticGift
-        position={[-1.4, 0.02, 1.3]}
+        position={[-0.95, 0.29, 0.82]}
         rotation={[0, 0.4, 0]}
         boxColor="#a11d2b"
         ribbonColor="#f2c45a"
         scale={1.15}
       />
       <RealisticGift
-        position={[1.45, 0.02, 1.1]}
+        position={[1.02, 0.29, 0.72]}
         rotation={[0, -0.5, 0]}
         boxColor="#1d6e46"
         ribbonColor="#d93848"
         scale={1.2}
       />
       <RealisticGift
-        position={[0.45, 0.02, 1.82]}
+        position={[0.28, 0.29, 1.18]}
         rotation={[0, 0.2, 0]}
         size={[0.52, 0.28, 0.38]}
         boxColor="#235789"
         ribbonColor="#f2c45a"
       />
       <RealisticGift
-        position={[-0.95, 0.02, -1.6]}
+        position={[-0.92, 0.29, -0.94]}
         rotation={[0, 1.1, 0]}
         boxColor="#7a2548"
         ribbonColor="#f2c45a"
@@ -295,11 +305,11 @@ export function GreatTreePlaza() {
       {/* Circular Wooden & Brass Miniature Railway */}
       <group name="toy-train-track">
         <mesh position={[0, 0.055, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[TRACK_RADIUS - 0.14, 0.024, 6, 72]} />
+          <torusGeometry args={[TRAIN_TRACK_RADIUS - 0.14, 0.024, 6, 72]} />
           <meshStandardMaterial color="#b99252" metalness={0.82} roughness={0.28} />
         </mesh>
         <mesh position={[0, 0.055, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[TRACK_RADIUS + 0.14, 0.024, 6, 72]} />
+          <torusGeometry args={[TRAIN_TRACK_RADIUS + 0.14, 0.024, 6, 72]} />
           <meshStandardMaterial color="#b99252" metalness={0.82} roughness={0.28} />
         </mesh>
         {sleepers.map((s) => (
@@ -344,12 +354,7 @@ export function GreatTreePlaza() {
       </group>
 
       {/* Real Photogrammetry Victorian Streetlamps & Wooden Bench */}
-      {[
-        [-4.5, -2.5, 0.5],
-        [4.5, -2.5, -0.5],
-        [-4.3, 3.6, 2.2],
-        [3.1, 4.4, -2.1],
-      ].map(([lx, lz, rot]) => (
+      {PLAZA_LAMP_PLACEMENTS.map(([lx, lz, rot]) => (
         <VictorianStreetLamp
           key={`lamp-${lx}-${lz}`}
           position={[lx, getGroundHeight(lx, lz), lz]}
@@ -358,19 +363,33 @@ export function GreatTreePlaza() {
         />
       ))}
 
-      <PhotogrammetryBench position={[-3.8, benchY, 2.8]} rotation={[0, 0.85, 0]} />
+      <PhotogrammetryBench
+        position={[PLAZA_BENCH_POSE.x, benchY, PLAZA_BENCH_POSE.z]}
+        rotation={[0, PLAZA_BENCH_POSE.rotY, 0]}
+      />
 
-      {/* Organic PBR Hand-Rolled Snowmen Beside the Reflective Pond */}
+      {/* Organic PBR Hand-Rolled Snowmen Along the Dry Snow Shore of the Pond */}
       <HandcraftedSnowman
-        position={[2.6, pondSnowmanY + Math.sin(snowmanHop * Math.PI) * 0.45, 5.2]}
-        rotationY={-0.5}
+        position={[
+          primarySnowman.x,
+          pondSnowmanY + Math.sin(snowmanHop * Math.PI) * 0.45,
+          primarySnowman.z,
+        ]}
+        rotationY={primarySnowman.rotY}
         onTap={() => {
           playMagicChime();
           setSnowmanHop(1);
           announceKey('toasts.snowmanWave');
         }}
       />
-      <HandcraftedSnowman position={[8.7, getGroundHeight(8.7, 5.0), 5.0]} rotationY={-2.1} />
+      <HandcraftedSnowman
+        position={[
+          secondarySnowman.x,
+          getGroundHeight(secondarySnowman.x, secondarySnowman.z),
+          secondarySnowman.z,
+        ]}
+        rotationY={secondarySnowman.rotY}
+      />
     </group>
   );
 }

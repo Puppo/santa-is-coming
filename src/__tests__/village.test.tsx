@@ -17,6 +17,24 @@ import { TRANSLATIONS } from '../i18n/translations';
 import { moveCameraShortestArc } from '../scene/CameraRig';
 import { createReindeerInstance, prepareReindeerTemplate } from '../scene/characters/ReindeerHerd';
 import {
+  CARRIER_LOOP_SPEED,
+  createCarrierLoopCurve,
+  createGrumpCaughtCurve,
+  createGrumpEscapedCurve,
+  createGrumpSneakCurve,
+  createSantaPatrolCurve,
+  GRUMP_PEEK_POS,
+  PLAZA_BENCH_POSE,
+  PLAZA_LAMP_PLACEMENTS,
+  SLEIGH_LAMP_PLACEMENTS,
+  SNOWMAN_PLACEMENTS,
+  STATIC_ELF_PLACEMENTS,
+  signedDistanceCircleToObb,
+  TRAIN_CAR_RADIUS,
+  TRAIN_TRACK_RADIUS,
+  VillageCollisionWorld,
+} from '../scene/collisionSystem';
+import {
   BASE_ROT_Y,
   createSleighFlightTrack,
   PAIR_LEAD_DISTANCES,
@@ -431,5 +449,261 @@ describe('Accessible HUD & Controls', () => {
       expect(calls).toEqual(['setLookAt', 'normalizeRotations']);
       expect(Math.abs(thetaEnd - thetaStart)).toBeLessThanOrEqual(Math.PI + 1e-6);
     }
+  });
+});
+
+describe('Village Spatial Clearance & Collision Avoidance', () => {
+  it('keeps zero static overlaps between buildings, props, trees, pond, train ring, sleigh, and stationed characters', () => {
+    const world = new VillageCollisionWorld();
+    world.resetDynamicState();
+
+    // Lamps, plaza bench, snowmen, and stationed elves must stand on dry ground above pond ice (-0.14)
+    for (const [x, z] of PLAZA_LAMP_PLACEMENTS) {
+      expect(getGroundHeight(x, z), `Plaza lamp at (${x}, ${z}) in pond`).toBeGreaterThan(-0.12);
+    }
+    for (const [x, z] of SLEIGH_LAMP_PLACEMENTS) {
+      expect(getGroundHeight(x, z), `Sleigh lamp at (${x}, ${z}) in pond`).toBeGreaterThan(-0.12);
+    }
+    expect(getGroundHeight(PLAZA_BENCH_POSE.x, PLAZA_BENCH_POSE.z)).toBeGreaterThan(-0.12);
+    for (const snowman of SNOWMAN_PLACEMENTS) {
+      expect(
+        getGroundHeight(snowman.x, snowman.z),
+        `Snowman at (${snowman.x}, ${snowman.z}) in pond`,
+      ).toBeGreaterThan(-0.12);
+    }
+    for (const elf of STATIC_ELF_PLACEMENTS) {
+      expect(getGroundHeight(elf.x, elf.z)).toBeGreaterThan(-0.12);
+    }
+
+    // Circle vs Circle (skip natural perimeter spruce-to-spruce forest canopy overlap)
+    const circles = world.staticCircles;
+    for (let i = 0; i < circles.length; i++) {
+      for (let j = i + 1; j < circles.length; j++) {
+        const a = circles[i];
+        const b = circles[j];
+        if (a.category === 'tree' && b.category === 'tree') continue;
+        const dist = Math.hypot(a.x - b.x, a.z - b.z);
+        expect(dist, `Static circle overlap ${a.id} vs ${b.id}`).toBeGreaterThanOrEqual(
+          a.radius + b.radius - 1e-4,
+        );
+      }
+    }
+
+    // Circle vs OBB (allow props mounted directly along their own chalet wall/porch)
+    for (const c of circles) {
+      for (const obb of world.staticObbs) {
+        if (c.id.startsWith('workshop-') && obb.id.startsWith('workshop-')) continue;
+        if (c.id.startsWith('cabin-') && obb.id.startsWith('cabin-')) continue;
+        const dist = signedDistanceCircleToObb(c.x, c.z, obb);
+        expect(dist, `Static obstacle overlap ${c.id} vs ${obb.id}`).toBeGreaterThanOrEqual(
+          c.radius - 1e-4,
+        );
+      }
+    }
+
+    // Parked sleigh & reindeer vs static world
+    const parkedSleigh = world.getActiveSleighObb();
+    expect(parkedSleigh).not.toBeNull();
+    if (parkedSleigh) {
+      for (const c of circles) {
+        const dist = signedDistanceCircleToObb(c.x, c.z, parkedSleigh);
+        expect(dist, `Parked sleigh overlap with ${c.id}`).toBeGreaterThanOrEqual(c.radius - 1e-4);
+      }
+    }
+    for (const deer of world.getActiveReindeerObstacles()) {
+      for (const c of circles) {
+        const dist = Math.hypot(deer.x - c.x, deer.z - c.z);
+        expect(dist, `Parked reindeer overlap ${deer.id} vs ${c.id}`).toBeGreaterThanOrEqual(
+          deer.radius + c.radius - 1e-4,
+        );
+      }
+    }
+
+    // Stationed elves vs all obstacles, parked sleigh/reindeer, and train ring
+    const stationed = world.getCharacterAgents();
+    for (let i = 0; i < stationed.length; i++) {
+      const a = stationed[i];
+      for (let j = i + 1; j < stationed.length; j++) {
+        const b = stationed[j];
+        expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThanOrEqual(a.radius + b.radius - 1e-4);
+      }
+      for (const c of circles) {
+        expect(
+          Math.hypot(a.x - c.x, a.z - c.z),
+          `Stationed ${a.id} vs ${c.id}`,
+        ).toBeGreaterThanOrEqual(a.radius + c.radius - 1e-4);
+      }
+      for (const obb of world.staticObbs) {
+        expect(
+          signedDistanceCircleToObb(a.x, a.z, obb),
+          `Stationed ${a.id} vs ${obb.id}`,
+        ).toBeGreaterThanOrEqual(a.radius - 1e-4);
+      }
+      expect(Math.abs(Math.hypot(a.x, a.z) - TRAIN_TRACK_RADIUS)).toBeGreaterThanOrEqual(
+        a.radius + TRAIN_CAR_RADIUS,
+      );
+    }
+  });
+
+  it('prevents any character-to-character or character-to-obstacle collision across 900 simulated village frames', () => {
+    const world = new VillageCollisionWorld();
+    world.resetDynamicState();
+
+    const carrierCurve = createCarrierLoopCurve();
+    const santaCurve = createSantaPatrolCurve();
+    const sneakCurve = createGrumpSneakCurve();
+    const flightTrack = createSleighFlightTrack();
+
+    const carrierProgress = [0, 0.25, 0.5, 0.75];
+    let santaProgress = 0.1;
+    let trainAngle = 0;
+    let grumpSneakProgress = 0;
+    let grumpRetreatCurve: THREE.CatmullRomCurve3 | null = null;
+    let grumpPos: [number, number] = [GRUMP_PEEK_POS[0], GRUMP_PEEK_POS[1]];
+    let prevGrumpState: 'idle' | 'peeking' | 'sneaking' | 'caught' | 'escaped' = 'idle';
+
+    const tmpPos = new THREE.Vector3();
+    const dt = 0.1;
+    let minClearance = Number.POSITIVE_INFINITY;
+    let firstViolation: string | null = null;
+
+    const recordMargin = (margin: number, frame: number, aId: string, otherId: string) => {
+      if (margin < minClearance) minClearance = margin;
+      if (margin < -1e-4 && firstViolation === null) {
+        firstViolation = `Frame ${frame}: ${aId} collided with ${otherId} (margin=${margin.toFixed(4)})`;
+      }
+    };
+
+    for (let frame = 0; frame < 900; frame++) {
+      const workshopBoost = frame >= 150 && frame < 300;
+      const trainBoost = frame >= 300 && frame < 450;
+      const sleighFlightActive = frame >= 600 && frame < 710;
+      const flightProgress = sleighFlightActive ? (frame - 600) / 104 : 0;
+
+      const grumpState: 'idle' | 'peeking' | 'sneaking' | 'caught' | 'escaped' =
+        frame >= 100 && frame < 150
+          ? 'peeking'
+          : frame >= 150 && frame < 260
+            ? 'sneaking'
+            : frame >= 260 && frame < 300
+              ? 'caught'
+              : frame >= 450 && frame < 500
+                ? 'peeking'
+                : frame >= 500 && frame < 610
+                  ? 'sneaking'
+                  : frame >= 610 && frame < 640
+                    ? 'escaped'
+                    : 'idle';
+
+      trainAngle += dt * (trainBoost ? 1.25 : 0.44);
+      world.updateTrainAngle(trainAngle);
+      world.updateSleighFlight(sleighFlightActive, Math.min(1, flightProgress), flightTrack);
+
+      // Update Santa
+      if (sleighFlightActive) {
+        world.removeAgent('santa');
+      } else {
+        santaCurve.getPointAt(santaProgress, tmpPos);
+        if (!world.shouldYield('santa', tmpPos.x, tmpPos.z, 0.4, 60)) {
+          santaProgress = (santaProgress + dt * 0.042) % 1;
+        }
+        santaCurve.getPointAt(santaProgress, tmpPos);
+        world.resolveAgent('santa', tmpPos.x, tmpPos.z, 0.4, 60);
+      }
+
+      // Update 4 Carrier Elves
+      const carrierMult = workshopBoost ? 1.75 : 1.0;
+      for (let i = 0; i < 4; i++) {
+        carrierCurve.getPointAt(carrierProgress[i], tmpPos);
+        if (!world.shouldYield(`carrier-${i}`, tmpPos.x, tmpPos.z, 0.3, 40)) {
+          carrierProgress[i] = (carrierProgress[i] + dt * CARRIER_LOOP_SPEED * carrierMult) % 1;
+        }
+        carrierCurve.getPointAt(carrierProgress[i], tmpPos);
+        world.resolveAgent(`carrier-${i}`, tmpPos.x, tmpPos.z, 0.3, 40);
+      }
+
+      // Update Holiday Grump
+      if (grumpState !== prevGrumpState) {
+        prevGrumpState = grumpState;
+        if (grumpState === 'peeking' || grumpState === 'sneaking') {
+          grumpSneakProgress = 0;
+          grumpRetreatCurve = null;
+        } else if (grumpState === 'caught') {
+          grumpRetreatCurve = createGrumpCaughtCurve(grumpPos[0], grumpPos[1]);
+        } else if (grumpState === 'escaped') {
+          grumpRetreatCurve = createGrumpEscapedCurve(grumpPos[0], grumpPos[1]);
+        }
+      }
+
+      if (grumpState === 'idle') {
+        world.removeAgent('grump');
+      } else if (grumpState === 'peeking') {
+        const res = world.resolveAgent('grump', GRUMP_PEEK_POS[0], GRUMP_PEEK_POS[1], 0.34, 30);
+        grumpPos = [res.x, res.z];
+      } else if (grumpState === 'sneaking') {
+        sneakCurve.getPointAt(grumpSneakProgress, tmpPos);
+        if (!world.shouldYield('grump', tmpPos.x, tmpPos.z, 0.34, 30)) {
+          grumpSneakProgress = Math.min(1, grumpSneakProgress + dt / 11);
+        }
+        sneakCurve.getPointAt(grumpSneakProgress, tmpPos);
+        const res = world.resolveAgent('grump', tmpPos.x, tmpPos.z, 0.34, 30);
+        grumpPos = [res.x, res.z];
+      } else if (grumpState === 'caught' || grumpState === 'escaped') {
+        const curve =
+          grumpRetreatCurve ?? createGrumpCaughtCurve(GRUMP_PEEK_POS[0], GRUMP_PEEK_POS[1]);
+        const phaseFrame = grumpState === 'caught' ? frame - 260 : frame - 610;
+        const durationFrames = grumpState === 'caught' ? 34 : 26;
+        curve.getPointAt(Math.min(1, phaseFrame / durationFrames), tmpPos);
+        const res = world.resolveAgent('grump', tmpPos.x, tmpPos.z, 0.34, 30);
+        grumpPos = [res.x, res.z];
+      }
+
+      // Record minimum signed clearance across every active character & obstacle on this frame
+      const agents = world.getCharacterAgents();
+      const activeTrainCars = world.getActiveTrainCars();
+      const activeSleigh = world.getActiveSleighObb();
+      const activeReindeer = world.getActiveReindeerObstacles();
+
+      for (let i = 0; i < agents.length; i++) {
+        const a = agents[i];
+        for (let j = i + 1; j < agents.length; j++) {
+          const b = agents[j];
+          recordMargin(Math.hypot(a.x - b.x, a.z - b.z) - (a.radius + b.radius), frame, a.id, b.id);
+        }
+        for (const c of world.staticCircles) {
+          recordMargin(Math.hypot(a.x - c.x, a.z - c.z) - (a.radius + c.radius), frame, a.id, c.id);
+        }
+        for (const obb of world.staticObbs) {
+          recordMargin(signedDistanceCircleToObb(a.x, a.z, obb) - a.radius, frame, a.id, obb.id);
+        }
+        for (const car of activeTrainCars) {
+          recordMargin(
+            Math.hypot(a.x - car.x, a.z - car.z) - (a.radius + car.radius),
+            frame,
+            a.id,
+            car.id,
+          );
+        }
+        if (activeSleigh) {
+          recordMargin(
+            signedDistanceCircleToObb(a.x, a.z, activeSleigh) - a.radius,
+            frame,
+            a.id,
+            activeSleigh.id,
+          );
+        }
+        for (const deer of activeReindeer) {
+          recordMargin(
+            Math.hypot(a.x - deer.x, a.z - deer.z) - (a.radius + deer.radius),
+            frame,
+            a.id,
+            deer.id,
+          );
+        }
+      }
+    }
+
+    expect(firstViolation).toBeNull();
+    expect(minClearance).toBeGreaterThanOrEqual(-1e-4);
   });
 });
