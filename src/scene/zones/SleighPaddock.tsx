@@ -6,7 +6,11 @@ import { getFabricNormalMap } from '../../assets/proceduralTextures';
 import { useVillage } from '../../state/villageStore';
 import { ReindeerHerd } from '../characters/ReindeerHerd';
 import { SleighSanta } from '../characters/RiggedSanta';
-import { SLEIGH_LAMP_PLACEMENTS, villageCollisionWorld } from '../collisionSystem';
+import {
+  PADDOCK_GIFT_PLACEMENTS,
+  SLEIGH_LAMP_PLACEMENTS,
+  villageCollisionWorld,
+} from '../collisionSystem';
 import { VictorianStreetLamp, WarmWoodenLantern } from '../PolyHavenProp';
 import { RealisticGift } from '../RealisticGift';
 import { BASE_ROT_Y, createSleighFlightTrack, PADDOCK_X, PADDOCK_Z } from '../sleighFlightPath';
@@ -177,19 +181,16 @@ export function SleighPaddock() {
       />
 
       {/* Wrapped Satin Presents on the Snow Waiting to be Loaded */}
-      <RealisticGift
-        position={[-2.4, getGroundHeight(-2.4, 10.65), 10.65]}
-        boxColor="#9e1c2b"
-        ribbonColor="#f2c45a"
-        scale={1.1}
-      />
-      <RealisticGift
-        position={[-3.05, getGroundHeight(-3.05, 10.95), 10.95]}
-        boxColor="#1d6e46"
-        ribbonColor="#f2c45a"
-        rotation={[0, 0.5, 0]}
-        scale={0.95}
-      />
+      {PADDOCK_GIFT_PLACEMENTS.map((gift) => (
+        <RealisticGift
+          key={`paddock-gift-${gift.x}-${gift.z}`}
+          position={[gift.x, getGroundHeight(gift.x, gift.z), gift.z]}
+          boxColor={gift.boxColor}
+          ribbonColor="#f2c45a"
+          rotation={[0, gift.rotationY, 0]}
+          scale={gift.scale}
+        />
+      ))}
 
       {/* Sculpted Victorian Swan-Neck Sleigh + 6 Animated Reindeer */}
       <group

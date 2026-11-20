@@ -24,8 +24,10 @@ import {
   createGrumpSneakCurve,
   createSantaPatrolCurve,
   GRUMP_PEEK_POS,
+  PADDOCK_GIFT_PLACEMENTS,
   PLAZA_BENCH_POSE,
   PLAZA_LAMP_PLACEMENTS,
+  REINDEER_SIDE_X,
   SLEIGH_LAMP_PLACEMENTS,
   SNOWMAN_PLACEMENTS,
   STATIC_ELF_PLACEMENTS,
@@ -34,6 +36,7 @@ import {
   TRAIN_TRACK_RADIUS,
   VillageCollisionWorld,
 } from '../scene/collisionSystem';
+import { FAIRY_GARLAND_STRANDS } from '../scene/FairyGarlands';
 import {
   BASE_ROT_Y,
   createSleighFlightTrack,
@@ -705,5 +708,100 @@ describe('Village Spatial Clearance & Collision Avoidance', () => {
 
     expect(firstViolation).toBeNull();
     expect(minClearance).toBeGreaterThanOrEqual(-1e-4);
+  });
+
+  it('keeps sleigh and all 6 reindeer clear of streetlamps, fairy garlands, gifts, and buildings in 3D throughout flight and landing', () => {
+    const track = createSleighFlightTrack();
+    const world = new VillageCollisionWorld();
+
+    const lampCols = [
+      ...PLAZA_LAMP_PLACEMENTS.map(([x, z]) => ({ x, z })),
+      ...SLEIGH_LAMP_PLACEMENTS.map(([x, z]) => ({ x, z })),
+    ].map((l, idx) => ({
+      id: `lamp-${idx}`,
+      x: l.x,
+      z: l.z,
+      yMax: getGroundHeight(l.x, l.z) + 3.05,
+      radius: 0.35,
+    }));
+
+    const garlandSamples = FAIRY_GARLAND_STRANDS.flatMap((strand, idx) => {
+      const a = new THREE.Vector3(...strand.from);
+      const b = new THREE.Vector3(...strand.to);
+      const mid = a.clone().lerp(b, 0.5);
+      mid.y -= strand.sag;
+      const curve = new THREE.CatmullRomCurve3([a, mid, b]);
+      return Array.from({ length: 30 }, (_, s) => ({
+        id: `garland-${idx}`,
+        pt: curve.getPointAt(s / 29),
+      }));
+    });
+
+    const buildingBoxes = world.staticObbs.filter((obb) => obb.category === 'building');
+
+    const carriagePos = new THREE.Vector3();
+    const carriageQuat = new THREE.Quaternion();
+    const sideWorld = new THREE.Vector3();
+
+    let minLampClearance = Number.POSITIVE_INFINITY;
+    let minGarlandClearance = Number.POSITIVE_INFINITY;
+    let minBuildingClearance = Number.POSITIVE_INFINITY;
+    let minGiftClearance = Number.POSITIVE_INFINITY;
+
+    const units: Array<{ lead: number; sides: readonly number[] }> = [
+      { lead: 0, sides: [-0.6, 0, 0.6] },
+      ...PAIR_LEAD_DISTANCES.map((lead) => ({ lead, sides: REINDEER_SIDE_X })),
+    ];
+
+    const bodyRadius = 0.45;
+    const bodyHeight = 1.48;
+
+    for (let step = 0; step <= 400; step++) {
+      const flightProgress = step / 400;
+      for (const unit of units) {
+        track.sampleCarriagePose(flightProgress, unit.lead, carriagePos, carriageQuat);
+        for (const sideX of unit.sides) {
+          sideWorld.set(sideX, 0, 0).applyQuaternion(carriageQuat).add(carriagePos);
+          const yBot = Math.max(sideWorld.y, getGroundHeight(sideWorld.x, sideWorld.z) + 0.02);
+          const yTop = yBot + bodyHeight;
+
+          for (const lamp of lampCols) {
+            const dxz =
+              Math.hypot(sideWorld.x - lamp.x, sideWorld.z - lamp.z) - (bodyRadius + lamp.radius);
+            const dy = yBot > lamp.yMax ? yBot - lamp.yMax : 0;
+            const d3 = dy > 0 ? Math.hypot(Math.max(0, dxz), dy) : dxz;
+            if (d3 < minLampClearance) minLampClearance = d3;
+          }
+
+          for (const sample of garlandSamples) {
+            const dxz = Math.hypot(sideWorld.x - sample.pt.x, sideWorld.z - sample.pt.z);
+            const dy =
+              sample.pt.y < yBot ? yBot - sample.pt.y : sample.pt.y > yTop ? sample.pt.y - yTop : 0;
+            const d3 = Math.hypot(dxz, dy) - (bodyRadius + 0.14);
+            if (d3 < minGarlandClearance) minGarlandClearance = d3;
+          }
+
+          for (const gift of PADDOCK_GIFT_PLACEMENTS) {
+            if (yBot < getGroundHeight(gift.x, gift.z) + 0.55) {
+              const dg =
+                Math.hypot(sideWorld.x - gift.x, sideWorld.z - gift.z) - (bodyRadius + gift.radius);
+              if (dg < minGiftClearance) minGiftClearance = dg;
+            }
+          }
+
+          if (yBot < 4.8) {
+            for (const bldg of buildingBoxes) {
+              const db = signedDistanceCircleToObb(sideWorld.x, sideWorld.z, bldg) - bodyRadius;
+              if (db < minBuildingClearance) minBuildingClearance = db;
+            }
+          }
+        }
+      }
+    }
+
+    expect(minLampClearance).toBeGreaterThan(0.35);
+    expect(minGarlandClearance).toBeGreaterThan(0.5);
+    expect(minGiftClearance).toBeGreaterThan(0.35);
+    expect(minBuildingClearance).toBeGreaterThan(0.5);
   });
 });

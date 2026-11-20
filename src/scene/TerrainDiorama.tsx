@@ -22,9 +22,9 @@ const PATH_CURVES = [
   ],
   [
     new THREE.Vector3(-6.8, 0, -0.8),
-    new THREE.Vector3(-7.0, 0, 3.3),
-    new THREE.Vector3(-5.8, 0, 7.6),
-    new THREE.Vector3(-3.6, 0, 9.5),
+    new THREE.Vector3(-7.1, 0, 3.3),
+    new THREE.Vector3(-6.6, 0, 6.3),
+    new THREE.Vector3(-5.5, 0, 6.6),
   ],
 ];
 

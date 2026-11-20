@@ -84,8 +84,20 @@ export const PLAZA_LAMP_PLACEMENTS: ReadonlyArray<[number, number, number]> = [
 ];
 
 export const SLEIGH_LAMP_PLACEMENTS: ReadonlyArray<[number, number]> = [
-  [-4.6, 7.2],
+  [-4.05, 6.65],
   [2.4, 7.6],
+];
+
+export const PADDOCK_GIFT_PLACEMENTS: ReadonlyArray<{
+  x: number;
+  z: number;
+  scale: number;
+  boxColor: string;
+  rotationY: number;
+  radius: number;
+}> = [
+  { x: -2.4, z: 11.0, scale: 1.1, boxColor: '#9e1c2b', rotationY: 0, radius: 0.33 },
+  { x: -3.15, z: 11.15, scale: 0.95, boxColor: '#1d6e46', rotationY: 0.5, radius: 0.29 },
 ];
 
 export const PLAZA_BENCH_POSE: PlacementPose = {
@@ -224,11 +236,11 @@ export function createCarrierLoopCurve(): THREE.CatmullRomCurve3 {
   return new THREE.CatmullRomCurve3(
     [
       new THREE.Vector3(-6.85, 0, -0.75),
-      new THREE.Vector3(-7.45, 0, 3.35),
-      new THREE.Vector3(-6.15, 0, 7.75),
-      new THREE.Vector3(-3.65, 0, 9.65),
-      new THREE.Vector3(-3.35, 0, 7.15),
-      new THREE.Vector3(-5.75, 0, 3.35),
+      new THREE.Vector3(-7.35, 0, 3.35),
+      new THREE.Vector3(-6.75, 0, 6.35),
+      new THREE.Vector3(-5.55, 0, 6.65),
+      new THREE.Vector3(-5.45, 0, 4.35),
+      new THREE.Vector3(-5.75, 0, 2.25),
       new THREE.Vector3(-5.85, 0, -0.65),
     ],
     true,
@@ -423,6 +435,7 @@ export class VillageCollisionWorld {
   private readonly parkedSleighObb: ObbObstacle;
   private readonly parkedReindeer: CircleObstacle[] = [];
   private readonly activeFlightReindeer: CircleObstacle[] = [];
+  private readonly activeReindeerGrounded: boolean[] = [];
   private activeSleighPos = new THREE.Vector3();
   private activeSleighQuat = new THREE.Quaternion();
   private activeSleighObb: ObbObstacle;
@@ -566,10 +579,15 @@ export class VillageCollisionWorld {
         category: 'prop',
       });
     });
-    this.staticCircles.push(
-      { id: 'paddock-gift-0', x: -2.4, z: 10.65, radius: 0.33, category: 'prop' },
-      { id: 'paddock-gift-1', x: -3.05, z: 10.95, radius: 0.29, category: 'prop' },
-    );
+    PADDOCK_GIFT_PLACEMENTS.forEach((gift, idx) => {
+      this.staticCircles.push({
+        id: `paddock-gift-${idx}`,
+        x: gift.x,
+        z: gift.z,
+        radius: gift.radius,
+        category: 'prop',
+      });
+    });
 
     // Workshop outdoor props
     const wsProps: Array<[string, number, number, number]> = [
@@ -631,6 +649,7 @@ export class VillageCollisionWorld {
         };
         this.parkedReindeer.push(unit);
         this.activeFlightReindeer.push({ ...unit });
+        this.activeReindeerGrounded.push(true);
       });
     });
   }
@@ -663,6 +682,7 @@ export class VillageCollisionWorld {
     this.parkedReindeer.forEach((p, idx) => {
       this.activeFlightReindeer[idx].x = p.x;
       this.activeFlightReindeer[idx].z = p.z;
+      this.activeReindeerGrounded[idx] = true;
     });
   }
 
@@ -685,6 +705,7 @@ export class VillageCollisionWorld {
       this.parkedReindeer.forEach((p, idx) => {
         this.activeFlightReindeer[idx].x = p.x;
         this.activeFlightReindeer[idx].z = p.z;
+        this.activeReindeerGrounded[idx] = true;
       });
       return;
     }
@@ -695,24 +716,32 @@ export class VillageCollisionWorld {
       this.activeSleighPos,
       this.activeSleighQuat,
     );
-    const groundClear = sample.heightAboveGround < 1.35;
-    this.sleighGrounded = groundClear;
+    this.sleighGrounded = sample.heightAboveGround < 1.35;
 
-    if (!groundClear) return;
-
-    const euler = new THREE.Euler().setFromQuaternion(this.activeSleighQuat, 'YXZ');
-    this.activeSleighObb = VillageCollisionWorld.createSleighObb(
-      this.activeSleighPos.x,
-      this.activeSleighPos.z,
-      euler.y,
-      'active-sleigh',
-    );
+    if (this.sleighGrounded) {
+      const euler = new THREE.Euler().setFromQuaternion(this.activeSleighQuat, 'YXZ');
+      this.activeSleighObb = VillageCollisionWorld.createSleighObb(
+        this.activeSleighPos.x,
+        this.activeSleighPos.z,
+        euler.y,
+        'active-sleigh',
+      );
+    }
 
     PAIR_LEAD_DISTANCES.forEach((leadDist, pairIdx) => {
-      flightTrack.sampleCarriagePose(flightProgress, leadDist, this.tmpPairPos, this.tmpPairQuat);
+      const pairSample = flightTrack.sampleCarriagePose(
+        flightProgress,
+        leadDist,
+        this.tmpPairPos,
+        this.tmpPairQuat,
+      );
+      const pairGrounded = pairSample.heightAboveGround < 1.65;
       REINDEER_SIDE_X.forEach((sideX, sideIdx) => {
+        const unitIdx = pairIdx * 2 + sideIdx;
+        this.activeReindeerGrounded[unitIdx] = pairGrounded;
+        if (!pairGrounded) return;
         this.tmpSideWorld.set(sideX, 0, 0).applyQuaternion(this.tmpPairQuat).add(this.tmpPairPos);
-        const unit = this.activeFlightReindeer[pairIdx * 2 + sideIdx];
+        const unit = this.activeFlightReindeer[unitIdx];
         unit.x = this.tmpSideWorld.x;
         unit.z = this.tmpSideWorld.z;
       });
@@ -731,8 +760,8 @@ export class VillageCollisionWorld {
     return this.sleighGrounded ? this.activeSleighObb : null;
   }
 
-  getActiveReindeerObstacles(): ReadonlyArray<CircleObstacle> {
-    return this.sleighGrounded ? this.activeFlightReindeer : [];
+  getActiveReindeerObstacles(): CircleObstacle[] {
+    return this.activeFlightReindeer.filter((_, idx) => this.activeReindeerGrounded[idx]);
   }
 
   getCharacterAgents(): DynamicAgent[] {
@@ -757,6 +786,20 @@ export class VillageCollisionWorld {
           return true;
         }
       }
+    }
+
+    for (let idx = 0; idx < this.activeFlightReindeer.length; idx++) {
+      if (!this.activeReindeerGrounded[idx]) continue;
+      const deer = this.activeFlightReindeer[idx];
+      if (Math.hypot(nextX - deer.x, nextZ - deer.z) < radius + deer.radius + 0.45) {
+        return true;
+      }
+    }
+    if (
+      this.sleighGrounded &&
+      signedDistanceCircleToObb(nextX, nextZ, this.activeSleighObb) < radius + 0.45
+    ) {
+      return true;
     }
 
     for (const other of this.agents.values()) {
@@ -822,9 +865,11 @@ export class VillageCollisionWorld {
 
       if (this.sleighGrounded) {
         pushOutOfObb(pos, radius, this.activeSleighObb, staticMargin);
-        for (const deer of this.activeFlightReindeer) {
-          pushOutOfCircle(pos, radius, deer.x, deer.z, deer.radius, staticMargin, 0.7);
-        }
+      }
+      for (let idx = 0; idx < this.activeFlightReindeer.length; idx++) {
+        if (!this.activeReindeerGrounded[idx]) continue;
+        const deer = this.activeFlightReindeer[idx];
+        pushOutOfCircle(pos, radius, deer.x, deer.z, deer.radius, staticMargin, 0.7);
       }
 
       for (const c of this.staticCircles) {

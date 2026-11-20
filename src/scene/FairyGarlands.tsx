@@ -22,7 +22,7 @@ const lampTop = (x: number, z: number): [number, number, number] => [
 const [nwLamp, neLamp, swLamp, seLamp] = PLAZA_LAMP_PLACEMENTS;
 const [sleighWestLamp, sleighEastLamp] = SLEIGH_LAMP_PLACEMENTS;
 
-const STRANDS: StrandDef[] = [
+export const FAIRY_GARLAND_STRANDS: StrandDef[] = [
   // Elf Workshop porch beam -> Plaza NW Streetlamp
   { from: [-6.65, 2.58, -2.35], to: lampTop(nwLamp[0], nwLamp[1]), sag: 0.38, bulbs: 8 },
   // Santa's Cabin porch beam -> Plaza NE Streetlamp
@@ -35,7 +35,7 @@ const STRANDS: StrandDef[] = [
   {
     from: lampTop(swLamp[0], swLamp[1]),
     to: lampTop(sleighWestLamp[0], sleighWestLamp[1]),
-    sag: 0.52,
+    sag: 0.45,
     bulbs: 9,
   },
   // Plaza SE Lamp -> Sleigh East Lamp
@@ -63,7 +63,7 @@ export function FairyGarlands() {
     const pts: THREE.Vector3[] = [];
     const wires: THREE.TubeGeometry[] = [];
 
-    STRANDS.forEach((strand) => {
+    FAIRY_GARLAND_STRANDS.forEach((strand) => {
       const start = new THREE.Vector3(...strand.from);
       const end = new THREE.Vector3(...strand.to);
       const mid = start.clone().lerp(end, 0.5);
